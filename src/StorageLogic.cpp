@@ -8,7 +8,8 @@ extern SdFs sd_bg;
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD DIAGNOSTIC ---");
     
-    // Khởi tạo thẻ với cấu hình Shared SPI, tốc độ 10MHz để ổn định tuyệt đối
+    // Khởi tạo thẻ với cấu hình Shared SPI, tốc độ 10MHz
+    // Dùng SdSpiConfig để ép chuẩn SPI dùng chung với màn hình
     if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) {
         isReady = true;
         
@@ -17,7 +18,6 @@ void StorageLogic::begin() {
         else if (sd_bg.fatType() == FAT_TYPE_EXFAT) Serial.println("[STORAGE] Format: exFAT");
         else Serial.printf("[STORAGE] Format: Unknown (%d)\n", sd_bg.fatType());
         
-        // CÚ CHỐT: Sửa lỗi cardSize thành sectorCount
         uint32_t sectors = sd_bg.card()->sectorCount();
         Serial.printf("[STORAGE] Card Size: %u MB\n", sectors / 2048);
         
@@ -25,7 +25,6 @@ void StorageLogic::begin() {
     } else {
         isReady = false;
         Serial.println("[STORAGE] SD Card Mount FAILED!");
-        Serial.println("[STORAGE] > Goi y: Kiem tra chan CS (7) hoac thu format lai the ve FAT32.");
     }
     Serial.println("[STORAGE] ---------------------------\n");
 }
@@ -34,37 +33,39 @@ void StorageLogic::loadFiles() {
     fileCount = 0;
     if (!isReady) return;
 
-    // Chuyển vào thư mục gốc
-    if (!sd_bg.chdir("/")) {
-        Serial.println("[STORAGE] Error: Could not chdir to root.");
-        return;
-    }
-
-    // Mở thư mục hiện tại để quét
-    FsFile dir = sd_bg.open(".");
+    // CÚ CHỐT: Mở trực tiếp thư mục gốc thay vì dùng chdir/open(".")
+    FsFile dir = sd_bg.open("/"); 
     if (!dir) {
-        Serial.println("[STORAGE] Error: Could not open working directory.");
-        return;
+        Serial.println("[STORAGE] Error: Could not open '/' (Root). Thử Mount lại...");
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)));
+        dir = sd_bg.open("/");
+        if (!dir) {
+            Serial.println("[STORAGE] Critical Error: Root directory inaccessible.");
+            return;
+        }
     }
-    dir.rewind();
 
-    Serial.println("[STORAGE] Scanning all files in root...");
+    dir.rewind(); // Đưa con trỏ về đầu danh sách file
+
+    Serial.println("[STORAGE] Scanning root directory...");
     FsFile file;
     while (file.openNext(&dir, O_READ)) {
         char name[32];
         file.getName(name, 32);
         
-        // Bỏ qua file ẩn và thư mục
-        if (!file.isHidden() && !file.isDir()) {
-            strcpy(fileNames[fileCount], name);
-            Serial.printf("  [%d] Found: %s (%llu bytes)\n", fileCount, name, (uint64_t)file.size());
-            fileCount++;
+        // Kiểm tra xem có phải file hợp lệ không
+        if (!file.isDir() && !file.isHidden()) {
+            // Chỉ lấy tối đa 14 file để hiển thị trên màn hình Remote
+            if (fileCount < 14) {
+                strcpy(fileNames[fileCount], name);
+                Serial.printf("  [%d] %s (%llu bytes)\n", fileCount, name, (uint64_t)file.size());
+                fileCount++;
+            }
         }
         file.close();
-        if (fileCount >= 14) break; 
     }
     dir.close();
-    Serial.printf("[STORAGE] Scan finished. Files found: %d\n", fileCount);
+    Serial.printf("[STORAGE] Scan finished. Total: %d files.\n", fileCount);
 }
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
@@ -78,12 +79,12 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
         return NULL;
     }
 
-    // Chặn file .bin để tránh in rác ra màn hình
+    // Chặn file BIN để không in rác
     if (strstr(filename, ".bin") != NULL) {
         file.close();
         char* buffer = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
         if (!buffer) buffer = (char*)malloc(128);
-        strcpy(buffer, "[BINARY FILE]\n\nNoi dung file nhi phan khong the hien thi.");
+        strcpy(buffer, "[BINARY FILE]\n\nFile he thong hoac hinh nen.\nKhong the xem noi dung text.");
         return buffer;
     }
 
@@ -114,7 +115,7 @@ void StorageLogic::saveConfig(RemoteState &state) {
         doc["oledBrightness"] = state.oledBrightness;
         serializeJson(doc, file);
         file.close();
-        Serial.println("[STORAGE] Config saved to SD.");
+        Serial.println("[STORAGE] Config saved.");
     }
 }
 
@@ -127,7 +128,7 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         if (!error) {
             state.sleepTimeout = doc["sleepTimeout"] | 30;
             state.oledBrightness = doc["oledBrightness"] | 50;
-            Serial.println("[STORAGE] Config loaded from SD.");
+            Serial.println("[STORAGE] Config loaded.");
         }
         file.close();
         return true;
