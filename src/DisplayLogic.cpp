@@ -11,11 +11,8 @@ DisplayLogic display;
 
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t *buf1 = NULL; 
-
 static lv_img_dsc_t custom_bg;
 static uint8_t* bg_data_buffer = NULL;
-
-// Khởi tạo đối tượng SdFat
 SdFs sd_bg; 
 
 #define BACKLIGHT_CHANNEL 0 
@@ -40,6 +37,7 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 }
 
 void DisplayLogic::begin() {
+    Serial.println("[DISPLAY] Initializing ST7789...");
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
@@ -70,17 +68,28 @@ void DisplayLogic::begin() {
     lv_indev_drv_register(&indev_drv);
 
     ui_init(); 
+    Serial.println("[DISPLAY] LVGL UI Initialized.");
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
-    // CÚ CHỐT 1: Dùng cấu hình chuẩn Shared SPI để không kẹt với màn hình
-    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) return; 
+    Serial.println("[DISPLAY] Loading background from SD...");
+    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) {
+        Serial.println("[DISPLAY] SD Begin Failed in loadBackground.");
+        return; 
+    }
     
     FsFile file = sd_bg.open("/bg.bin", O_READ);
-    if (!file) return;
+    if (!file) {
+        Serial.println("[DISPLAY] bg.bin not found on SD.");
+        return;
+    }
 
     size_t fileSize = file.size();
-    if (fileSize < 115200) { file.close(); return; } 
+    if (fileSize < 115200) { 
+        Serial.printf("[DISPLAY] bg.bin size error: %d bytes\n", fileSize);
+        file.close(); 
+        return; 
+    } 
 
     if (bg_data_buffer != NULL) {
         heap_caps_free(bg_data_buffer);
@@ -91,7 +100,6 @@ void DisplayLogic::loadBackgroundFromSD() {
     
     if (bg_data_buffer) {
         file.read(bg_data_buffer, 115200);
-        
         custom_bg.header.always_zero = 0;
         custom_bg.header.w = 240;
         custom_bg.header.h = 240;
@@ -101,12 +109,11 @@ void DisplayLogic::loadBackgroundFromSD() {
         
         lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
         lv_obj_set_style_bg_opa(objects.main, 0, 0);
-        
         lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
         lv_obj_set_style_bg_opa(objects.menu, 0, 0);
-        
         lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
         lv_obj_set_style_bg_opa(objects.stock, 0, 0);
+        Serial.println("[DISPLAY] Background applied successfully.");
     }
     file.close();
 }

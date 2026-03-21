@@ -6,40 +6,42 @@ StorageLogic storage;
 extern SdFs sd_bg; 
 
 void StorageLogic::begin() {
-    // Luôn bắt đầu bằng cách thử Mount thẻ với config SHARED_SPI
+    Serial.println("[STORAGE] Initializing SD Card...");
+    
+    // Thử Mount thẻ nhớ với cấu hình Shared SPI
     if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) {
         isReady = true;
+        Serial.println("[STORAGE] SD Card Mounted Success!");
         loadFiles();
     } else {
         isReady = false;
+        Serial.println("[STORAGE] SD Card Mount FAILED! Check wiring/card.");
     }
 }
 
 void StorageLogic::loadFiles() {
     fileCount = 0;
-    
-    // CÚ CHỐT 2: Luôn mở lại thư mục gốc để làm mới danh sách
+    if (!isReady) return;
+
     FsFile dir = sd_bg.open("/");
     if (!dir) {
-        // Nếu mở thất bại, thử Mount lại một phát nữa cho chắc
-        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)));
-        dir = sd_bg.open("/");
-        if (!dir) { isReady = false; return; }
+        Serial.println("[STORAGE] Error: Cannot open Root directory.");
+        return;
     }
-    isReady = true;
-
-    // CÚ CHỐT 3: Quan trọng nhất - Đưa con trỏ quét file về đầu thẻ nhớ
     dir.rewind();
 
+    Serial.println("[STORAGE] Scanning files:");
     FsFile file;
     while (file.openNext(&dir, O_READ)) {
         if (!file.isHidden() && !file.isDir() && fileCount < 14) {
             file.getName(fileNames[fileCount], 32);
+            Serial.printf("  - Found: %s\n", fileNames[fileCount]);
             fileCount++;
         }
         file.close();
     }
     dir.close();
+    Serial.printf("[STORAGE] Total files found: %d\n", fileCount);
 }
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
@@ -47,14 +49,19 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
 
     char path[40];
     sprintf(path, "/%s", filename);
+    Serial.printf("[STORAGE] Reading file: %s\n", path);
+
     FsFile file = sd_bg.open(path, O_READ);
-    if (!file) return NULL;
+    if (!file) {
+        Serial.println("[STORAGE] Error: Could not open file.");
+        return NULL;
+    }
 
     if (strstr(filename, ".bin") != NULL) {
         file.close();
         char* buffer = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
         if (!buffer) buffer = (char*)malloc(128);
-        strcpy(buffer, "[BINARY FILE]\n\nKhong the hien thi noi dung file nay tren man hinh.\nFile nay dung de nap he thong hoac hinh nen.");
+        strcpy(buffer, "[BINARY FILE]\n\nKhong the hien thi noi dung file nay.");
         return buffer;
     }
 
@@ -73,9 +80,7 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
 }
 
 void StorageLogic::freePSRAMBuffer(char* buffer) {
-    if (buffer) {
-        heap_caps_free(buffer);
-    }
+    if (buffer) heap_caps_free(buffer);
 }
 
 void StorageLogic::saveConfig(RemoteState &state) {
@@ -87,6 +92,7 @@ void StorageLogic::saveConfig(RemoteState &state) {
         doc["oledBrightness"] = state.oledBrightness;
         serializeJson(doc, file);
         file.close();
+        Serial.println("[STORAGE] Config saved to SD.");
     }
 }
 
@@ -99,6 +105,7 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         if (!error) {
             state.sleepTimeout = doc["sleepTimeout"] | 30;
             state.oledBrightness = doc["oledBrightness"] | 50;
+            Serial.println("[STORAGE] Config loaded from SD.");
         }
         file.close();
         return true;
