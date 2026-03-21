@@ -84,7 +84,7 @@ struct RemoteState {
 };
 
 #define SCREEN_WIDTH    240 
-#define SCREEN_HEIGHT   240
+#define SCREEN_HEIGHT   320
 #define BAT_MIN 3.5
 #define BAT_MAX 4.2
 #define BAT_CALIBRATION_FACTOR 1.0
