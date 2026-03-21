@@ -44,9 +44,8 @@ void DisplayLogic::begin() {
     ledcWrite(BACKLIGHT_CHANNEL, 255);      
 
     SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
-    tft.init(240, 320); 
+    tft.init(240, 240); 
     tft.setRotation(0); 
-    tft.invertDisplay(true);
 
     lv_init();
 
