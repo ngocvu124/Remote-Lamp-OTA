@@ -15,13 +15,13 @@
 const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
 
 // --- CẤU HÌNH PINOUT (ESP32-S3) ---
-#define SPI_SCK_PIN     4
-#define SPI_MISO_PIN    6
-#define SPI_MOSI_PIN    5
-#define SCR_CS_PIN      3
-#define SCR_DC_PIN      2
-#define SCR_RST_PIN     1
-#define SCR_BLK_PIN     44 
+#define SPI_SCK_PIN     5
+#define SPI_MISO_PIN    4
+#define SPI_MOSI_PIN    6
+#define SCR_CS_PIN       1
+#define SCR_DC_PIN       2
+#define SCR_RST_PIN      3
+#define SCR_BLK_PIN      44 
 #define SD_CS_PIN       7 
 #define ROTARY_A_PIN    8
 #define ROTARY_B_PIN    9
