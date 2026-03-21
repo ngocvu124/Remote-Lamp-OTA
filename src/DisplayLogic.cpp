@@ -46,6 +46,7 @@ void DisplayLogic::begin() {
     SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
     tft.init(240, 320); 
     tft.setRotation(0); 
+    tft.invertDisplay(true);
 
     lv_init();
 
