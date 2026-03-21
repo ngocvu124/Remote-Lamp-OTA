@@ -26,7 +26,7 @@ void create_screen_main() {
     lv_obj_t *obj = lv_obj_create(0);
     objects.main = obj;
     lv_obj_set_pos(obj, 0, 0);
-    lv_obj_set_size(obj, 240, 240);
+    lv_obj_set_size(obj, 240, 320);
     lv_obj_set_style_bg_color(obj, lv_color_hex(0xff000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(obj, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_layout(obj, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -136,7 +136,7 @@ void create_screen_menu() {
     lv_obj_t *obj = lv_obj_create(0);
     objects.menu = obj;
     lv_obj_set_pos(obj, 0, 0);
-    lv_obj_set_size(obj, 240, 240);
+    lv_obj_set_size(obj, 240, 320);
     lv_obj_set_style_bg_color(obj, lv_color_hex(0xff000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     {
         lv_obj_t *parent_obj = obj;
@@ -246,7 +246,7 @@ void create_screen_stock() {
     lv_obj_t *obj = lv_obj_create(0);
     objects.stock = obj;
     lv_obj_set_pos(obj, 0, 0);
-    lv_obj_set_size(obj, 240, 240);
+    lv_obj_set_size(obj, 240, 320);
     lv_obj_set_style_bg_color(obj, lv_color_hex(0xff000000), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_layout(obj, LV_LAYOUT_FLEX, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_flex_flow(obj, LV_FLEX_FLOW_COLUMN, LV_PART_MAIN | LV_STATE_DEFAULT);
