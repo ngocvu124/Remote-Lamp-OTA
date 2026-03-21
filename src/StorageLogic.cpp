@@ -6,42 +6,65 @@ StorageLogic storage;
 extern SdFs sd_bg; 
 
 void StorageLogic::begin() {
-    Serial.println("[STORAGE] Initializing SD Card...");
+    Serial.println("\n[STORAGE] --- SD CARD DIAGNOSTIC ---");
     
-    // Thử Mount thẻ nhớ với cấu hình Shared SPI
+    // Khởi tạo thẻ với cấu hình Shared SPI, tốc độ 10MHz để ổn định tuyệt đối
     if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) {
         isReady = true;
-        Serial.println("[STORAGE] SD Card Mounted Success!");
+        
+        // Kiểm tra định dạng thẻ
+        if (sd_bg.fatType() == FAT_TYPE_FAT32) Serial.println("[STORAGE] Format: FAT32");
+        else if (sd_bg.fatType() == FAT_TYPE_EXFAT) Serial.println("[STORAGE] Format: exFAT");
+        else Serial.printf("[STORAGE] Format: Unknown (%d)\n", sd_bg.fatType());
+        
+        // CÚ CHỐT: Sửa lỗi cardSize thành sectorCount
+        uint32_t sectors = sd_bg.card()->sectorCount();
+        Serial.printf("[STORAGE] Card Size: %u MB\n", sectors / 2048);
+        
         loadFiles();
     } else {
         isReady = false;
-        Serial.println("[STORAGE] SD Card Mount FAILED! Check wiring/card.");
+        Serial.println("[STORAGE] SD Card Mount FAILED!");
+        Serial.println("[STORAGE] > Goi y: Kiem tra chan CS (7) hoac thu format lai the ve FAT32.");
     }
+    Serial.println("[STORAGE] ---------------------------\n");
 }
 
 void StorageLogic::loadFiles() {
     fileCount = 0;
     if (!isReady) return;
 
-    FsFile dir = sd_bg.open("/");
+    // Chuyển vào thư mục gốc
+    if (!sd_bg.chdir("/")) {
+        Serial.println("[STORAGE] Error: Could not chdir to root.");
+        return;
+    }
+
+    // Mở thư mục hiện tại để quét
+    FsFile dir = sd_bg.open(".");
     if (!dir) {
-        Serial.println("[STORAGE] Error: Cannot open Root directory.");
+        Serial.println("[STORAGE] Error: Could not open working directory.");
         return;
     }
     dir.rewind();
 
-    Serial.println("[STORAGE] Scanning files:");
+    Serial.println("[STORAGE] Scanning all files in root...");
     FsFile file;
     while (file.openNext(&dir, O_READ)) {
-        if (!file.isHidden() && !file.isDir() && fileCount < 14) {
-            file.getName(fileNames[fileCount], 32);
-            Serial.printf("  - Found: %s\n", fileNames[fileCount]);
+        char name[32];
+        file.getName(name, 32);
+        
+        // Bỏ qua file ẩn và thư mục
+        if (!file.isHidden() && !file.isDir()) {
+            strcpy(fileNames[fileCount], name);
+            Serial.printf("  [%d] Found: %s (%llu bytes)\n", fileCount, name, (uint64_t)file.size());
             fileCount++;
         }
         file.close();
+        if (fileCount >= 14) break; 
     }
     dir.close();
-    Serial.printf("[STORAGE] Total files found: %d\n", fileCount);
+    Serial.printf("[STORAGE] Scan finished. Files found: %d\n", fileCount);
 }
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
@@ -49,19 +72,18 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
 
     char path[40];
     sprintf(path, "/%s", filename);
-    Serial.printf("[STORAGE] Reading file: %s\n", path);
-
     FsFile file = sd_bg.open(path, O_READ);
     if (!file) {
-        Serial.println("[STORAGE] Error: Could not open file.");
+        Serial.printf("[STORAGE] Error: Cannot open %s\n", path);
         return NULL;
     }
 
+    // Chặn file .bin để tránh in rác ra màn hình
     if (strstr(filename, ".bin") != NULL) {
         file.close();
         char* buffer = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
         if (!buffer) buffer = (char*)malloc(128);
-        strcpy(buffer, "[BINARY FILE]\n\nKhong the hien thi noi dung file nay.");
+        strcpy(buffer, "[BINARY FILE]\n\nNoi dung file nhi phan khong the hien thi.");
         return buffer;
     }
 
