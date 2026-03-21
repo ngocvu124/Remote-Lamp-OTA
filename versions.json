@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.2.1 (Upgrade wifi)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.1.bin"
+  },
+  {
     "name": "v1.2 (Upgrade wifi)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.bin"
   },
@@ -8,7 +12,7 @@
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.1.bin"
   },
   {
-    "name": "v1.0",
+    "name": "v1.0 (First version)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.0.bin"
   }
 ]
