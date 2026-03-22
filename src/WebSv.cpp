@@ -69,7 +69,7 @@ static void webTask(void* pvParameters) {
         });
     } 
     else if (mode == WEB_MODE_UPLOAD) {
-        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10))); 
+        // ĐÃ XÓA LỆNH sd_bg.begin(...) Ở ĐÂY ĐỂ TRÁNH CRASH THẺ NHỚ
         
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/upload.html", "r");
@@ -77,7 +77,6 @@ static void webTask(void* pvParameters) {
                 server->send(500, "text/plain", "Error: File upload.html missing in LittleFS!");
                 return;
             }
-            // File này là fs::File của LittleFS nên dùng streamFile bình thường
             server->streamFile(file, "text/html"); 
             file.close();
         });
@@ -89,30 +88,58 @@ static void webTask(void* pvParameters) {
         }, [server]() {
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
-                if (sd_bg.exists("/bg.bin")) sd_bg.remove("/bg.bin"); 
-                uploadFile = sd_bg.open("/bg.bin", O_WRITE | O_CREAT);
+                // Thêm Semaphore chặn màn hình để thẻ nhớ ghi file
+                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                    if (sd_bg.exists("/bg.bin")) sd_bg.remove("/bg.bin"); 
+                    uploadFile = sd_bg.open("/bg.bin", O_WRITE | O_CREAT);
+                    xSemaphoreGive(xGuiSemaphore);
+                }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
-                if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
+                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                    if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
+                    xSemaphoreGive(xGuiSemaphore);
+                }
             } else if (upload.status == UPLOAD_FILE_END) {
-                if (uploadFile) uploadFile.close(); 
+                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                    if (uploadFile) uploadFile.close(); 
+                    xSemaphoreGive(xGuiSemaphore);
+                }
             }
         });
 
-        // --- ĐOẠN API MỚI ĐỂ TẢI FILE bg.bin VỀ MÁY TÍNH ĐÃ ĐƯỢC CHỮA LỖI ---
         server->on("/download", HTTP_GET, [server]() {
-            FsFile file = sd_bg.open("/bg.bin", O_READ);
+            FsFile file;
+            // Dùng Semaphore xin phép mở file để tránh tranh giành SPI với LVGL
+            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                file = sd_bg.open("/bg.bin", O_READ);
+                if (!file) file = sd_bg.open("bg.bin", O_READ); // Fallback gọi không cần gạch chéo
+                xSemaphoreGive(xGuiSemaphore);
+            }
+
             if (file) {
                 server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
                 server->setContentLength(file.size());
                 server->send(200, "application/octet-stream", "");
 
-                // Tự tay bơm dữ liệu từ thẻ nhớ ra WiFi thay vì dùng streamFile
                 uint8_t buffer[1024]; 
                 int bytesRead;
-                while ((bytesRead = file.read(buffer, sizeof(buffer))) > 0) {
-                    server->client().write(buffer, bytesRead);
+                while (1) {
+                    // Cắt nhỏ việc đọc file (1KB/lần), đọc xong nhả Semaphore ra cho màn hình vẽ, rồi lại xin tiếp
+                    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                        bytesRead = file.read(buffer, sizeof(buffer));
+                        xSemaphoreGive(xGuiSemaphore);
+                    } else {
+                        bytesRead = 0; // Kẹt SPI
+                    }
+                    
+                    if (bytesRead <= 0) break;
+                    server->client().write(buffer, bytesRead); // Gửi data xuống WiFi không cần khóa SPI
                 }
-                file.close();
+                
+                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                    file.close();
+                    xSemaphoreGive(xGuiSemaphore);
+                }
             } else {
                 server->send(404, "text/plain", "Khong tim thay bg.bin tren the nho!");
             }
