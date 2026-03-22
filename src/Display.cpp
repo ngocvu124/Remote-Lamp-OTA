@@ -16,6 +16,9 @@ static uint8_t* bg_data_buffer = NULL;
 SdFs sd_bg; 
 
 static lv_obj_t* scr_image_preview = NULL; 
+static uint8_t* preview_data_buffer = NULL; // Buffer chứa data ảnh khi xem trước
+static lv_img_dsc_t preview_img_dsc;        // Trình mô tả ảnh cho LVGL
+static lv_obj_t* preview_img_obj = NULL;    // Đối tượng vẽ ảnh
 
 #define BACKLIGHT_CHANNEL 0 
 
@@ -385,7 +388,7 @@ void DisplayLogic::closeProgressPopup() {
     }
 }
 
-// CÚ CHỐT: Hàm vẽ trực tiếp ảnh RAW đã được tối ưu chống kẹt SPI
+// CÚ CHỐT: Dùng LVGL chính thống để vẽ ảnh thay vì ghi đè SPI thủ công
 bool DisplayLogic::showImagePreview(FsFile& file) {
     if(!file) return false;
     
@@ -394,49 +397,52 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
     }
 
-    // 1. Chuyển sang màn hình đen LVGL để "chiếm chỗ" và reset trạng thái vẽ
+    size_t fileSize = file.size();
+    if (fileSize != 115200) return false; 
+
+    // Dọn dẹp buffer nếu trước đó chưa dọn
+    if (preview_data_buffer != NULL) {
+        heap_caps_free(preview_data_buffer);
+        preview_data_buffer = NULL;
+    }
+
+    // Cấp phát 115KB PSRAM
+    preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM);
+    if (!preview_data_buffer) return false;
+
+    // Đọc trọn gói từ thẻ nhớ
+    file.read(preview_data_buffer, 115200);
+
+    // Gói dữ liệu thô vào trình mô tả ảnh của LVGL
+    preview_img_dsc.header.always_zero = 0;
+    preview_img_dsc.header.w = 240;
+    preview_img_dsc.header.h = 240;
+    preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
+    preview_img_dsc.data_size = 115200;
+    preview_img_dsc.data = preview_data_buffer;
+
+    // Vẽ ảnh lên màn hình (Sinh ra object ảnh nếu chưa có)
+    if (!preview_img_obj) {
+        preview_img_obj = lv_img_create(scr_image_preview);
+        lv_obj_center(preview_img_obj);
+    }
+    
+    // Gắn nguồn ảnh mới vào
+    lv_img_set_src(preview_img_obj, &preview_img_dsc);
+
+    // Kích hoạt hiển thị màn hình preview này thay vì màn hình Menu
     lv_scr_load(scr_image_preview);
-    lv_timer_handler(); 
     
-    // 2. Cấp phát buffer tạm trên PSRAM để đọc dữ liệu thẻ nhớ (Mỗi lần đọc 10 dòng)
-    const int chunk_lines = 10;
-    const size_t buffer_size = SCREEN_WIDTH * chunk_lines * 2; 
-    uint16_t* line_buffer = (uint16_t*)heap_caps_malloc(buffer_size, MALLOC_CAP_SPIRAM);
-    if (!line_buffer) {
-        line_buffer = (uint16_t*)malloc(buffer_size);
-    }
-    if (!line_buffer) return false;
-
-    // 3. Tắt đèn nền bằng LEDC để không bị nháy màn hình khi đang load ảnh
-    ledcWrite(BACKLIGHT_CHANNEL, 0); 
-    
-    // 4. Vòng lặp cắt lát: Đọc thẻ nhớ (Dùng SPI) -> Tráo màu -> Vẽ TFT (Dùng SPI)
-    int y = 0;
-    while (y < SCREEN_HEIGHT) {
-        int current_h = min(chunk_lines, SCREEN_HEIGHT - y);
-        int bytes_to_read = SCREEN_WIDTH * current_h * 2;
-        
-        // BƯỚC A: Đọc thẻ nhớ
-        int bytes_read = file.read((uint8_t*)line_buffer, bytes_to_read);
-        if (bytes_read <= 0) break; 
-
-        int pixels_read = bytes_read / 2;
-        
-        // BƯỚC B: Tráo byte sửa lỗi màu Little Endian
-        for (int i = 0; i < pixels_read; i++) {
-            uint16_t color = line_buffer[i];
-            line_buffer[i] = (color >> 8) | (color << 8); 
-        }
-        
-        // BƯỚC C: Vẽ lên TFT (Hàm drawRGBBitmap sẽ tự động startWrite() và endWrite() chống kẹt SPI)
-        tft.drawRGBBitmap(0, y, line_buffer, SCREEN_WIDTH, current_h);
-        
-        y += current_h;
-    }
-    
-    heap_caps_free(line_buffer); 
-
-    // 5. Bật đèn nền lên max sáng để xem ảnh
-    ledcWrite(BACKLIGHT_CHANNEL, 255); 
     return true;
+}
+
+// Hàm này được AppLogic gọi khi user bấm nút thoát
+void DisplayLogic::closeImagePreview() {
+    if (preview_data_buffer != NULL) {
+        heap_caps_free(preview_data_buffer);
+        preview_data_buffer = NULL;
+    }
+    if (preview_img_obj) {
+        lv_img_set_src(preview_img_obj, ""); 
+    }
 }

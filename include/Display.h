@@ -1,5 +1,5 @@
-#ifndef DISPLAY_H
-#define DISPLAY_H
+#ifndef DISPLAY_LOGIC_H
+#define DISPLAY_LOGIC_H
 
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
@@ -7,7 +7,7 @@
 #include <SPI.h>
 #include "Config.h"
 #include "lvgl.h"
-#include <SdFat.h>
+#include <SdFat.h> 
 
 class DisplayLogic {
 public:
@@ -23,8 +23,10 @@ public:
     void closeProgressPopup();
     
     void forceRebuild(); 
-    void loadBackgroundFromSD(); // CÚ CHỐT: Đọc ảnh từ thẻ nhớ SD
+    void loadBackgroundFromSD(); 
+    
     bool showImagePreview(FsFile& file);
+    void closeImagePreview(); // CÚ CHỐT: Hàm dọn dẹp RAM khi thoát xem ảnh
 
 private:
     static void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
@@ -37,6 +39,5 @@ private:
 };
 
 extern DisplayLogic display;
-extern Adafruit_ST7789 tft;
 
 #endif

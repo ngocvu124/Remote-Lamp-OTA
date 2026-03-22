@@ -10,6 +10,7 @@
 #include "WebSv.h" 
 #include <WiFi.h>
 #include <esp_heap_caps.h>
+#include <SdFat.h>
 
 AppLogic app;
 TaskHandle_t stockTaskHandle = NULL;
@@ -142,6 +143,7 @@ void AppLogic::handleEvents() {
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); // Đóng text popup
                     display.closeProgressPopup(); 
+                    display.closeImagePreview(); // <--- CÚ CHỐT: Giải phóng PSRAM và dọn ảnh
                     xSemaphoreGive(xGuiSemaphore);
                 }
                 // Nếu đang ở OTA hoặc Upload BG, long press cũng thoát menu luôn
@@ -208,6 +210,7 @@ void AppLogic::handleEvents() {
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); // Đóng text popup
                     display.closeProgressPopup(); 
+                    display.closeImagePreview(); // <--- CÚ CHỐT: Giải phóng PSRAM và dọn ảnh
                     xSemaphoreGive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_UPLOAD_BG) exitMenu();
