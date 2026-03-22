@@ -1,9 +1,9 @@
-#include "WebServer.h"
+#include "WebSv.h"
 #include "Config.h"
 #include "Display.h"
 #include "Storage.h"
 #include <WiFi.h>
-#include <WebSv.h>
+#include <WebServer.h>
 #include <LittleFS.h>
 #include <esp_heap_caps.h>
 
@@ -22,7 +22,6 @@ void WebServerLogic::begin() {
 static void webTask(void* pvParameters) {
     WebServerMode mode = (WebServerMode)(intptr_t)pvParameters;
     
-    // Cấp phát WebServer trên Heap của Task để dọn dẹp sạch sẽ khi Task kết thúc
     WebServer* server = new WebServer(80);
     static FsFile uploadFile; 
     
@@ -64,13 +63,11 @@ static void webTask(void* pvParameters) {
             WiFi.softAPdisconnect(true);
             WiFi.mode(WIFI_STA);
             WiFi.begin(qsid.c_str(), qpass.c_str());
-            webServer.isRunning = false; // Báo hiệu tắt Task
+            webServer.isRunning = false; 
         });
     } 
     else if (mode == WEB_MODE_UPLOAD) {
         sd_bg.begin(SD_CS_PIN); 
-        WiFi.mode(WIFI_AP);
-        WiFi.softAP("REMOTE_LAMP_BG"); 
         
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/upload.html", "r");
@@ -105,7 +102,6 @@ static void webTask(void* pvParameters) {
         server->handleClient();
         vTaskDelay(pdMS_TO_TICKS(20));
         
-        // CÚ CHỐT: Tự sát Task nếu AppTask phát hiện người dùng bấm nút back thoát Menu!
         if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA) {
             webServer.isRunning = false;
         }
@@ -121,11 +117,10 @@ static void webTask(void* pvParameters) {
         WiFi.softAPdisconnect(true);
         WiFi.disconnect();
     } else if (mode == WEB_MODE_UPLOAD) {
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_OFF);
+        // Không ngắt WiFi, giữ trạng thái kết nối cho AppLogic xử lý khi thoát menu
     }
     
-    vTaskDelete(NULL); // Tự hủy
+    vTaskDelete(NULL); 
 }
 
 bool WebServerLogic::runWiFiSetup() {
@@ -147,7 +142,8 @@ bool WebServerLogic::runWiFiSetup() {
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA) {
+        // Đã cập nhật chặn huỷ kết nối cho cả MENU_UPLOAD_BG
+        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_UPLOAD_BG) {
             WiFi.disconnect();
             return false;
         }
@@ -174,7 +170,6 @@ bool WebServerLogic::runWiFiSetup() {
         xSemaphoreGive(xGuiSemaphore);
     } else heap_caps_free(msg_buf);
 
-    // Kích hoạt WebTask xử lý WiFi
     isRunning = true;
     xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
 
@@ -187,12 +182,11 @@ bool WebServerLogic::runWiFiSetup() {
         xSemaphoreGive(xGuiSemaphore);
     } else heap_caps_free(msg_buf);
 
-    // Đứng chờ cho đến khi WebTask tự tắt cờ isRunning (người dùng đã nhập xong hoặc bấm Back)
     while (isRunning) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA) {
+    if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_UPLOAD_BG) {
         return false;
     }
 
@@ -219,16 +213,41 @@ bool WebServerLogic::runWiFiSetup() {
 }
 
 void WebServerLogic::runBgUpload() {
+    // Đảm bảo ESP32 đã kết nối vào mạng WiFi nhà bạn
+    if (!runWiFiSetup()) {
+        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+            display.showProgressPopup("LOI KET NOI", "Khong the ket noi WiFi!\nVui long thu lai.", 0);
+            xSemaphoreGive(xGuiSemaphore);
+        }
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+            display.closeProgressPopup();
+            xSemaphoreGive(xGuiSemaphore);
+        }
+        
+        // Hủy quá trình và ném người dùng về lại Control Menu
+        appState.currentMenu = MENU_CONTROL;
+        appState.menuIndex = 3; 
+        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+            display.forceRebuild();
+            display.updateUI(appState);
+            xSemaphoreGive(xGuiSemaphore);
+        }
+        return;
+    }
+
+    // Nếu kết nối thành công, lấy IP và hiện lên màn hình
+    String ip = WiFi.localIP().toString();
     char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
     if (!msg_buf) msg_buf = (char*)malloc(256);
-    strcpy(msg_buf, "1. Ket noi WiFi: REMOTE_LAMP_BG\n2. Mo trinh duyet web\n3. Truy cap: 192.168.4.1\nDe chon anh tu dien thoai!");
+    sprintf(msg_buf, "1. Mo trinh duyet web\n2. Truy cap IP:\n%s\nDe chon anh tu dien thoai!", ip.c_str());
     
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.showProgressPopup("CHANGE BACKGROUND", msg_buf, 0);
+        display.showProgressPopup("UPLOAD BG", msg_buf, 0);
         xSemaphoreGive(xGuiSemaphore);
     } else heap_caps_free(msg_buf);
 
-    // Bật WebTask ở chế độ Upload và trả luồng về ngay cho AppLogic xử lý phím bấm
     isRunning = true;
     xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_UPLOAD, PRIO_WEB, NULL, 1);
 }
