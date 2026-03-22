@@ -24,8 +24,8 @@ float BatteryLogic::readRawVoltage() {
 int BatteryLogic::getPercentage() {
     float volts = readRawVoltage();
     if (volts > 4.25) return 100; // Pin đầy hoặc đang cắm sạc
-    // Ánh xạ dải 3.5V - 4.2V sang 0% - 100%
-    int pct = map((int)(volts * 100), 350, 420, 0, 100);
+    // Ánh xạ dải 3.3V - 4.2V sang 0% - 100%
+    int pct = map((int)(volts * 100), 330, 420, 0, 100);
     return constrain(pct, 0, 100);
 }
 
@@ -38,7 +38,7 @@ void BatteryLogic::update(RemoteState &state) {
     if (currentVolts > 4.25) {
         newBat = 100;
     } else {
-        newBat = map((int)(currentVolts * 100), 350, 420, 0, 100);
+        newBat = map((int)(currentVolts * 100), 330, 420, 0, 100);
         newBat = constrain(newBat, 0, 100);
     }
 
