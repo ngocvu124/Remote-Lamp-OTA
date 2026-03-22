@@ -400,20 +400,25 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     size_t fileSize = file.size();
     if (fileSize != 115200) return false; 
 
-    // Dọn dẹp buffer nếu trước đó chưa dọn
     if (preview_data_buffer != NULL) {
         heap_caps_free(preview_data_buffer);
         preview_data_buffer = NULL;
     }
-
-    // Cấp phát 115KB PSRAM
     preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM);
     if (!preview_data_buffer) return false;
 
-    // Đọc trọn gói từ thẻ nhớ
+    // 1. Đọc toàn bộ file vào PSRAM
     file.read(preview_data_buffer, 115200);
 
-    // Gói dữ liệu thô vào trình mô tả ảnh của LVGL
+    // 2. CÚ CHỐT CHỮA BỆNH MÀU XANH: Tráo byte (Swap Endian)
+    // RGB565 có 57600 pixel (240x240), mỗi pixel 2 byte (16-bit)
+    uint16_t* pixel_ptr = (uint16_t*)preview_data_buffer;
+    for (int i = 0; i < 57600; i++) {
+        uint16_t color = pixel_ptr[i];
+        pixel_ptr[i] = (color >> 8) | (color << 8); // Lật Byte cao và Byte thấp
+    }
+
+    // 3. Khai báo cho LVGL
     preview_img_dsc.header.always_zero = 0;
     preview_img_dsc.header.w = 240;
     preview_img_dsc.header.h = 240;
@@ -421,16 +426,12 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     preview_img_dsc.data_size = 115200;
     preview_img_dsc.data = preview_data_buffer;
 
-    // Vẽ ảnh lên màn hình (Sinh ra object ảnh nếu chưa có)
     if (!preview_img_obj) {
         preview_img_obj = lv_img_create(scr_image_preview);
         lv_obj_center(preview_img_obj);
     }
-    
-    // Gắn nguồn ảnh mới vào
     lv_img_set_src(preview_img_obj, &preview_img_dsc);
 
-    // Kích hoạt hiển thị màn hình preview này thay vì màn hình Menu
     lv_scr_load(scr_image_preview);
     
     return true;

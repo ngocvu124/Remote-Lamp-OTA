@@ -6,9 +6,11 @@
 #include <WebServer.h>
 #include <LittleFS.h>
 #include <esp_heap_caps.h>
+#include <SdFat.h>
 
 WebServerLogic webServer;
 extern SemaphoreHandle_t xGuiSemaphore;
+extern SdFs sd_bg; 
 
 void WebServerLogic::begin() {
     if (!LittleFS.begin(true)) {
@@ -67,7 +69,7 @@ static void webTask(void* pvParameters) {
         });
     } 
     else if (mode == WEB_MODE_UPLOAD) {
-        sd_bg.begin(SD_CS_PIN); 
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10))); 
         
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/upload.html", "r");
@@ -75,7 +77,8 @@ static void webTask(void* pvParameters) {
                 server->send(500, "text/plain", "Error: File upload.html missing in LittleFS!");
                 return;
             }
-            server->streamFile(file, "text/html");
+            // File này là fs::File của LittleFS nên dùng streamFile bình thường
+            server->streamFile(file, "text/html"); 
             file.close();
         });
 
@@ -92,6 +95,26 @@ static void webTask(void* pvParameters) {
                 if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
             } else if (upload.status == UPLOAD_FILE_END) {
                 if (uploadFile) uploadFile.close(); 
+            }
+        });
+
+        // --- ĐOẠN API MỚI ĐỂ TẢI FILE bg.bin VỀ MÁY TÍNH ĐÃ ĐƯỢC CHỮA LỖI ---
+        server->on("/download", HTTP_GET, [server]() {
+            FsFile file = sd_bg.open("/bg.bin", O_READ);
+            if (file) {
+                server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
+                server->setContentLength(file.size());
+                server->send(200, "application/octet-stream", "");
+
+                // Tự tay bơm dữ liệu từ thẻ nhớ ra WiFi thay vì dùng streamFile
+                uint8_t buffer[1024]; 
+                int bytesRead;
+                while ((bytesRead = file.read(buffer, sizeof(buffer))) > 0) {
+                    server->client().write(buffer, bytesRead);
+                }
+                file.close();
+            } else {
+                server->send(404, "text/plain", "Khong tim thay bg.bin tren the nho!");
             }
         });
     }
@@ -116,8 +139,6 @@ static void webTask(void* pvParameters) {
     if (mode == WEB_MODE_WIFI && WiFi.status() != WL_CONNECTED) {
         WiFi.softAPdisconnect(true);
         WiFi.disconnect();
-    } else if (mode == WEB_MODE_UPLOAD) {
-        // Không ngắt WiFi, giữ trạng thái kết nối cho AppLogic xử lý khi thoát menu
     }
     
     vTaskDelete(NULL); 
@@ -142,7 +163,6 @@ bool WebServerLogic::runWiFiSetup() {
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
-        // Đã cập nhật chặn huỷ kết nối cho cả MENU_UPLOAD_BG
         if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_UPLOAD_BG) {
             WiFi.disconnect();
             return false;
@@ -213,7 +233,6 @@ bool WebServerLogic::runWiFiSetup() {
 }
 
 void WebServerLogic::runBgUpload() {
-    // Đảm bảo ESP32 đã kết nối vào mạng WiFi nhà bạn
     if (!runWiFiSetup()) {
         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
             display.showProgressPopup("LOI KET NOI", "Khong the ket noi WiFi!\nVui long thu lai.", 0);
@@ -226,7 +245,6 @@ void WebServerLogic::runBgUpload() {
             xSemaphoreGive(xGuiSemaphore);
         }
         
-        // Hủy quá trình và ném người dùng về lại Control Menu
         appState.currentMenu = MENU_CONTROL;
         appState.menuIndex = 3; 
         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
@@ -237,11 +255,11 @@ void WebServerLogic::runBgUpload() {
         return;
     }
 
-    // Nếu kết nối thành công, lấy IP và hiện lên màn hình
     String ip = WiFi.localIP().toString();
     char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
     if (!msg_buf) msg_buf = (char*)malloc(256);
-    sprintf(msg_buf, "1. Mo trinh duyet web\n2. Truy cap IP:\n%s\nDe chon anh tu dien thoai!", ip.c_str());
+    
+    sprintf(msg_buf, "1. Up anh web:\n%s\n2. Tai file:\n%s/download", ip.c_str(), ip.c_str());
     
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
         display.showProgressPopup("UPLOAD BG", msg_buf, 0);
