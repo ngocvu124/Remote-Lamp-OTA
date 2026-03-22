@@ -15,7 +15,7 @@ static lv_img_dsc_t custom_bg;
 static uint8_t* bg_data_buffer = NULL;
 SdFs sd_bg; 
 
-static lv_obj_t* scr_image_preview = NULL; // Màn hình đen dùng để làm nền khi preview ảnh
+static lv_obj_t* scr_image_preview = NULL; 
 
 #define BACKLIGHT_CHANNEL 0 
 
@@ -72,7 +72,6 @@ void DisplayLogic::begin() {
 
     ui_init(); 
     
-    // Khởi tạo sẵn một màn hình đen để phục vụ tính năng Preview Ảnh
     scr_image_preview = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
 
@@ -386,7 +385,7 @@ void DisplayLogic::closeProgressPopup() {
     }
 }
 
-// CÚ CHỐT: Hàm vẽ trực tiếp ảnh RAW từ thẻ nhớ để preview
+// CÚ CHỐT: Hàm vẽ trực tiếp ảnh RAW đã được tối ưu chống kẹt SPI
 bool DisplayLogic::showImagePreview(FsFile& file) {
     if(!file) return false;
     
@@ -399,8 +398,9 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     lv_scr_load(scr_image_preview);
     lv_timer_handler(); 
     
-    // 2. Cấp phát buffer tạm trên PSRAM để đọc dữ liệu thẻ nhớ
-    const size_t buffer_size = SCREEN_WIDTH * 10 * 2; 
+    // 2. Cấp phát buffer tạm trên PSRAM để đọc dữ liệu thẻ nhớ (Mỗi lần đọc 10 dòng)
+    const int chunk_lines = 10;
+    const size_t buffer_size = SCREEN_WIDTH * chunk_lines * 2; 
     uint16_t* line_buffer = (uint16_t*)heap_caps_malloc(buffer_size, MALLOC_CAP_SPIRAM);
     if (!line_buffer) {
         line_buffer = (uint16_t*)malloc(buffer_size);
@@ -410,35 +410,33 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     // 3. Tắt đèn nền bằng LEDC để không bị nháy màn hình khi đang load ảnh
     ledcWrite(BACKLIGHT_CHANNEL, 0); 
     
-    // 4. Mở kênh SPI cứng và đẩy ảnh lên
-    tft.startWrite();
-    tft.setAddrWindow(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    uint32_t total_pixels = SCREEN_WIDTH * SCREEN_HEIGHT;
-    uint32_t pixels_drawn = 0;
-    
-    while (pixels_drawn < total_pixels) {
-        uint32_t pixels_to_read = min((uint32_t)(buffer_size / 2), total_pixels - pixels_drawn);
+    // 4. Vòng lặp cắt lát: Đọc thẻ nhớ (Dùng SPI) -> Tráo màu -> Vẽ TFT (Dùng SPI)
+    int y = 0;
+    while (y < SCREEN_HEIGHT) {
+        int current_h = min(chunk_lines, SCREEN_HEIGHT - y);
+        int bytes_to_read = SCREEN_WIDTH * current_h * 2;
         
-        int bytes_read = file.read((uint8_t*)line_buffer, pixels_to_read * 2);
+        // BƯỚC A: Đọc thẻ nhớ
+        int bytes_read = file.read((uint8_t*)line_buffer, bytes_to_read);
         if (bytes_read <= 0) break; 
 
-        uint32_t pixels_read = bytes_read / 2;
+        int pixels_read = bytes_read / 2;
         
-        // SỬA LỖI MÀU: Tráo byte vì code JS lưu file theo chuẩn Little Endian, còn ST7789 dùng Big Endian
-        for (uint32_t i = 0; i < pixels_read; i++) {
+        // BƯỚC B: Tráo byte sửa lỗi màu Little Endian
+        for (int i = 0; i < pixels_read; i++) {
             uint16_t color = line_buffer[i];
             line_buffer[i] = (color >> 8) | (color << 8); 
         }
         
-        tft.writePixels(line_buffer, pixels_read);
-        pixels_drawn += pixels_read;
+        // BƯỚC C: Vẽ lên TFT (Hàm drawRGBBitmap sẽ tự động startWrite() và endWrite() chống kẹt SPI)
+        tft.drawRGBBitmap(0, y, line_buffer, SCREEN_WIDTH, current_h);
+        
+        y += current_h;
     }
     
-    tft.endWrite(); 
     heap_caps_free(line_buffer); 
 
-    // 5. Bật đèn nền lên max sáng (Mức 255) để xem ảnh rõ nhất
+    // 5. Bật đèn nền lên max sáng để xem ảnh
     ledcWrite(BACKLIGHT_CHANNEL, 255); 
     return true;
 }
