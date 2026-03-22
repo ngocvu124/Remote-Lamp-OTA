@@ -7,6 +7,7 @@
 #include <SPI.h>
 #include "Config.h"
 #include "lvgl.h"
+#include <SdFat.h>
 
 class DisplayLogic {
 public:
@@ -23,6 +24,7 @@ public:
     
     void forceRebuild(); 
     void loadBackgroundFromSD(); // CÚ CHỐT: Đọc ảnh từ thẻ nhớ SD
+    bool showImagePreview(FsFile& file);
 
 private:
     static void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);

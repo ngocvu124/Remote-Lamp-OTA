@@ -15,6 +15,8 @@ static lv_img_dsc_t custom_bg;
 static uint8_t* bg_data_buffer = NULL;
 SdFs sd_bg; 
 
+static lv_obj_t* scr_image_preview = NULL; // Màn hình đen dùng để làm nền khi preview ảnh
+
 #define BACKLIGHT_CHANNEL 0 
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Exit"}; 
@@ -69,6 +71,11 @@ void DisplayLogic::begin() {
     lv_indev_drv_register(&indev_drv);
 
     ui_init(); 
+    
+    // Khởi tạo sẵn một màn hình đen để phục vụ tính năng Preview Ảnh
+    scr_image_preview = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
+
     Serial.println("[DISPLAY] LVGL UI Initialized.");
 }
 
@@ -216,7 +223,6 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 int count = 0;
                 
                 if (state.currentMenu == MENU_USB_MODE) {
-                    // CÚ CHỐT: Ép quét lại file mỗi khi dựng menu SD Explorer
                     storage.loadFiles();
                     for (int i = 0; i < storage.fileCount; i++) { items[i] = storage.fileNames[i]; }
                     count = storage.fileCount;
@@ -378,4 +384,61 @@ void DisplayLogic::closeProgressPopup() {
         ota_label_content = NULL;
         ota_bar = NULL;
     }
+}
+
+// CÚ CHỐT: Hàm vẽ trực tiếp ảnh RAW từ thẻ nhớ để preview
+bool DisplayLogic::showImagePreview(FsFile& file) {
+    if(!file) return false;
+    
+    if (!scr_image_preview) {
+        scr_image_preview = lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
+    }
+
+    // 1. Chuyển sang màn hình đen LVGL để "chiếm chỗ" và reset trạng thái vẽ
+    lv_scr_load(scr_image_preview);
+    lv_timer_handler(); 
+    
+    // 2. Cấp phát buffer tạm trên PSRAM để đọc dữ liệu thẻ nhớ
+    const size_t buffer_size = SCREEN_WIDTH * 10 * 2; 
+    uint16_t* line_buffer = (uint16_t*)heap_caps_malloc(buffer_size, MALLOC_CAP_SPIRAM);
+    if (!line_buffer) {
+        line_buffer = (uint16_t*)malloc(buffer_size);
+    }
+    if (!line_buffer) return false;
+
+    // 3. Tắt đèn nền bằng LEDC để không bị nháy màn hình khi đang load ảnh
+    ledcWrite(BACKLIGHT_CHANNEL, 0); 
+    
+    // 4. Mở kênh SPI cứng và đẩy ảnh lên
+    tft.startWrite();
+    tft.setAddrWindow(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    uint32_t total_pixels = SCREEN_WIDTH * SCREEN_HEIGHT;
+    uint32_t pixels_drawn = 0;
+    
+    while (pixels_drawn < total_pixels) {
+        uint32_t pixels_to_read = min((uint32_t)(buffer_size / 2), total_pixels - pixels_drawn);
+        
+        int bytes_read = file.read((uint8_t*)line_buffer, pixels_to_read * 2);
+        if (bytes_read <= 0) break; 
+
+        uint32_t pixels_read = bytes_read / 2;
+        
+        // SỬA LỖI MÀU: Tráo byte vì code JS lưu file theo chuẩn Little Endian, còn ST7789 dùng Big Endian
+        for (uint32_t i = 0; i < pixels_read; i++) {
+            uint16_t color = line_buffer[i];
+            line_buffer[i] = (color >> 8) | (color << 8); 
+        }
+        
+        tft.writePixels(line_buffer, pixels_read);
+        pixels_drawn += pixels_read;
+    }
+    
+    tft.endWrite(); 
+    heap_caps_free(line_buffer); 
+
+    // 5. Bật đèn nền lên max sáng (Mức 255) để xem ảnh rõ nhất
+    ledcWrite(BACKLIGHT_CHANNEL, 255); 
+    return true;
 }
