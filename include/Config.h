@@ -85,9 +85,10 @@ struct RemoteState {
 
 #define SCREEN_WIDTH    240 
 #define SCREEN_HEIGHT   240
-#define BAT_MIN 3.5
+#define BAT_MIN 3.3
 #define BAT_MAX 4.2
-#define BAT_CALIBRATION_FACTOR 1.0
+#define BAT_CALIBRATION_FACTOR 1.265
+#define BAT_SAMPLES 20
 
 extern RemoteState appState; 
 extern SemaphoreHandle_t xGuiSemaphore;

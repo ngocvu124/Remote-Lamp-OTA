@@ -5,47 +5,39 @@ BatteryLogic battery;
 
 void BatteryLogic::begin() {
     pinMode(PIN_BATTERY, INPUT);
-    // Cấu hình ADC để đọc được dải điện áp lên tới 3.1V (sau phân áp)
+    // ADC 11dB cho ESP32-S3
     analogSetPinAttenuation(PIN_BATTERY, ADC_11db);
     Serial.println("[BATTERY] Voltage Sensor Initialized.");
 }
 
 float BatteryLogic::readRawVoltage() {
     uint32_t mvSum = 0;
-    // Lấy trung bình nhiều mẫu để tránh nhiễu nhảy số lung tung
-    for(int i = 0; i < SAMPLES; i++) {
+    // Sử dụng BAT_SAMPLES đã định nghĩa trong Config.h
+    for(int i = 0; i < BAT_SAMPLES; i++) {
         mvSum += analogReadMilliVolts(PIN_BATTERY);
         delay(1);
     }
-    // Công thức: (MilliVolts trung bình * Hệ số cầu phân áp * Hệ số hiệu chuẩn) / 1000 để ra Volt
-    return (mvSum / (float)SAMPLES * VOLTAGE_DIVIDER_RATIO * BAT_CALIBRATION_FACTOR) / 1000.0;
+    return (mvSum / (float)BAT_SAMPLES * VOLTAGE_DIVIDER_RATIO * BAT_CALIBRATION_FACTOR) / 1000.0;
 }
 
 int BatteryLogic::getPercentage() {
     float volts = readRawVoltage();
-    if (volts > 4.25) return 100; // Pin đầy hoặc đang cắm sạc
-    // Ánh xạ dải 3.3V - 4.2V sang 0% - 100%
-    int pct = map((int)(volts * 100), 330, 420, 0, 100);
-    return constrain(pct, 0, 100);
+    
+    // Mốc 3.3V là 0%, 4.2V là 100% theo yêu cầu của bác
+    if (volts >= 4.20) return 100;
+    if (volts <= 3.30) return 0;
+    
+    float pct = (volts - 3.30f) / (4.20f - 3.30f) * 100.0f;
+    return constrain((int)pct, 0, 100);
 }
 
 void BatteryLogic::update(RemoteState &state) {
-    // Đọc Volt thực tế
     float currentVolts = readRawVoltage();
-    
-    // Tính toán % dựa trên số Volt vừa đọc
-    int newBat;
-    if (currentVolts > 4.25) {
-        newBat = 100;
-    } else {
-        newBat = map((int)(currentVolts * 100), 330, 420, 0, 100);
-        newBat = constrain(newBat, 0, 100);
-    }
+    int newBat = getPercentage();
 
-    // CÚ CHỐT: IN LOG RA TERMINAL ĐỂ BÁC BẮT MẠCH PIN
+    // Hiện log để bác soi Volt
     Serial.printf("[BATTERY] Real-time: %.2fV | Capacity: %d%%\n", currentVolts, newBat);
 
-    // Cập nhật vào hệ thống nếu có sự thay đổi
     if (newBat != state.batteryLevel) {
         state.batteryLevel = newBat;
     }

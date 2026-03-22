@@ -215,6 +215,8 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 int count = 0;
                 
                 if (state.currentMenu == MENU_USB_MODE) {
+                    // CÚ CHỐT: Ép quét lại file mỗi khi dựng menu SD Explorer
+                    storage.loadFiles();
                     for (int i = 0; i < storage.fileCount; i++) { items[i] = storage.fileNames[i]; }
                     count = storage.fileCount;
                 } else {
