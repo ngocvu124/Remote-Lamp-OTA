@@ -1,4 +1,4 @@
-#include "StockLogic.h"
+#include "Stock.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>

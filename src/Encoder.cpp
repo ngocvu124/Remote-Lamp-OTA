@@ -1,4 +1,4 @@
-#include "EncoderLogic.h"
+#include "Encoder.h"
 
 EncoderLogic encoder;
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_A_PIN, ROTARY_B_PIN, ROTARY_BTN_PIN, -1, ROTARY_STEPS);

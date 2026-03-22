@@ -1,10 +1,10 @@
-#include "EspNowLogic.h"
+#include "EspNow.h"
 #include <esp_now.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include "Config.h"
-#include "DisplayLogic.h"
-#include "EncoderLogic.h"
+#include "Display.h"
+#include "Encoder.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 

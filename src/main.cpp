@@ -1,12 +1,12 @@
 #include <Arduino.h>
 #include "Config.h"
-#include "DisplayLogic.h"
-#include "EspNowLogic.h"
-#include "EncoderLogic.h"
-#include "BatteryLogic.h"
-#include "AppLogic.h"
-#include "SystemLogic.h"
-#include "StorageLogic.h"
+#include "Display.h"
+#include "EspNow.h"
+#include "Encoder.h"
+#include "Battery.h"
+#include "App.h"
+#include "System.h"
+#include "Storage.h"
 #include <SPI.h>
 
 SemaphoreHandle_t xGuiSemaphore = NULL;

@@ -1,5 +1,5 @@
-#include "SystemLogic.h"
-#include "DisplayLogic.h"
+#include "System.h"
+#include "Display.h"
 #include "driver/rtc_io.h"
 #include "driver/gpio.h" 
 

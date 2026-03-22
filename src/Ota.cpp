@@ -1,10 +1,10 @@
-#include "OtaLogic.h"
+#include "Ota.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
-#include "DisplayLogic.h"
+#include "Display.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <esp_heap_caps.h>

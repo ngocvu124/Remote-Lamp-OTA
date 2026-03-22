@@ -1,4 +1,4 @@
-#include "BatteryLogic.h"
+#include "Battery.h"
 
 BatteryLogic battery;
 #define VOLTAGE_DIVIDER_RATIO 2.0 

@@ -1,8 +1,8 @@
-#include "DisplayLogic.h"
+#include "Display.h"
 #include "ui/ui.h"      
 #include "ui/screens.h" 
-#include "StorageLogic.h" 
-#include "OtaLogic.h" 
+#include "Storage.h" 
+#include "Ota.h" 
 #include <esp_heap_caps.h>
 #include <SdFat.h> 
 
