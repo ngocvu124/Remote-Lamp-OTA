@@ -1,5 +1,5 @@
-#ifndef ENCODER_LOGIC_H
-#define ENCODER_LOGIC_H
+#ifndef ENCODER_H
+#define ENCODER_H
 
 #include <Arduino.h>
 #include "Config.h"

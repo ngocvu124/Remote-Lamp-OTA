@@ -1,5 +1,5 @@
-#ifndef APP_LOGIC_H
-#define APP_LOGIC_H
+#ifndef APP_H
+#define APP_H
 
 #include <Arduino.h>
 #include "Config.h"

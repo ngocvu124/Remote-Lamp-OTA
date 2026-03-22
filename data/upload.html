@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đổi Hình Nền ESP32</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #222; color: #fff; margin: 0; padding: 20px; }
+        canvas { border: 2px solid #ff7200; border-radius: 8px; margin-top: 15px; max-width: 100%; box-shadow: 0px 4px 10px rgba(0,0,0,0.5); }
+        .btn { background: #ff7200; color: #fff; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 15px; width: 100%; max-width: 240px; }
+        .btn:disabled { background: #555; cursor: not-allowed; }
+        input[type="file"] { display: none; }
+        .upload-label { display: inline-block; background: #444; color: #fff; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; width: calc(100% - 48px); max-width: 192px; border: 1px solid #777; }
+        #status { margin-top: 15px; color: #00ff00; font-weight: bold; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <h2>ĐỔI HÌNH NỀN (Tự Động Crop)</h2>
+    <label class="upload-label">
+        <input type="file" id="fileInput" accept="image/jpeg, image/png">
+        CHỌN ẢNH TỪ MÁY
+    </label>
+    <br>
+    <canvas id="canvas" width="240" height="240"></canvas>
+    <br>
+    <button id="uploadBtn" class="btn" disabled>TẢI LÊN MÀN HÌNH</button>
+    <div id="status"></div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const statusDiv = document.getElementById('status');
+        let rgb565Data = null;
+
+        ctx.fillStyle = '#333';
+        ctx.fillRect(0, 0, 240, 240);
+        ctx.fillStyle = '#aaa';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Ảnh xem trước (240x240)', 120, 120);
+
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const scale = Math.max(240 / img.width, 240 / img.height);
+                    const w = img.width * scale;
+                    const h = img.height * scale;
+                    const x = (240 - w) / 2;
+                    const y = (240 - h) / 2;
+                    
+                    ctx.clearRect(0, 0, 240, 240);
+                    ctx.drawImage(img, x, y, w, h);
+                    
+                    const imgData = ctx.getImageData(0, 0, 240, 240).data;
+                    rgb565Data = new Uint8Array(240 * 240 * 2); 
+                    
+                    let j = 0;
+                    for (let i = 0; i < imgData.length; i += 4) {
+                        const r = imgData[i] >> 3;
+                        const g = imgData[i+1] >> 2;
+                        const b = imgData[i+2] >> 3;
+                        const rgb565 = (r << 11) | (g << 5) | b;
+                        
+                        rgb565Data[j++] = rgb565 & 0xFF;
+                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF;
+                    }
+                    
+                    uploadBtn.disabled = false;
+                    statusDiv.style.color = '#fff';
+                    statusDiv.innerText = 'Đã dịch xong màu! Sẵn sàng tải lên.';
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        });
+
+        uploadBtn.addEventListener('click', function() {
+            if (!rgb565Data) return;
+            uploadBtn.disabled = true;
+            statusDiv.innerText = 'Đang bắn file qua WiFi... Chờ xíu!';
+            statusDiv.style.color = '#ff7200';
+
+            const blob = new Blob([rgb565Data], { type: 'application/octet-stream' });
+            const formData = new FormData();
+            formData.append('bg', blob, 'bg.bin');
+
+            fetch('/upload', { method: 'POST', body: formData })
+            .then(response => {
+                if(response.ok) {
+                    statusDiv.style.color = '#00ff00';
+                    statusDiv.innerText = 'XONG! Màn hình đang tự khởi động lại...';
+                } else throw new Error('Upload failed');
+            })
+            .catch(error => {
+                statusDiv.style.color = 'red';
+                statusDiv.innerText = 'Lỗi mạng: ' + error.message;
+                uploadBtn.disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>

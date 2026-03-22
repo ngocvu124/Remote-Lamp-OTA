@@ -1,5 +1,5 @@
-#ifndef DISPLAY_LOGIC_H
-#define DISPLAY_LOGIC_H
+#ifndef DISPLAY_H
+#define DISPLAY_H
 
 #include <Arduino.h>
 #include <Adafruit_GFX.h>

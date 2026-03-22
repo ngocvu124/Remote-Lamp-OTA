@@ -33,11 +33,13 @@ const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
 #define STACK_GUI       16384
 #define STACK_NETWORK   16384  
 #define STACK_SYSTEM    16384
+#define STACK_WEB       8192  
 
 #define PRIO_INPUT      5     
 #define PRIO_GUI        4
 #define PRIO_SYSTEM     3
 #define PRIO_NETWORK    2     
+#define PRIO_WEB        2
 
 // --- CẤU TRÚC SỰ KIỆN ENCODER ---
 enum EncoderEvent {
@@ -56,7 +58,7 @@ typedef struct struct_message {
   char sysCmd;
 } struct_message;
 
-// CÚ CHỐT: Danh sách các Menu (Đã bổ sung MENU_UPLOAD_BG số 9)
+// CÚ CHỐT: Danh sách các Menu
 enum MenuLevel {
     MENU_NONE = 0,
     MENU_MAIN = 1,

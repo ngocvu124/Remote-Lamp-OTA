@@ -6,16 +6,14 @@
 #include "System.h"
 #include "Storage.h" 
 #include "Stock.h"
-#include "Ota.h" 
+#include "Ota.h"
+#include "WebSv.h" 
 #include <WiFi.h>
 #include <esp_heap_caps.h>
-#include <WebServer.h> 
-#include <SdFat.h> 
 
 AppLogic app;
 TaskHandle_t stockTaskHandle = NULL;
 TaskHandle_t otaTaskHandle = NULL;
-TaskHandle_t bgUploadTaskHandle = NULL; 
 extern SemaphoreHandle_t xGuiSemaphore;
 extern QueueHandle_t xEncoderQueue;
 extern SdFs sd_bg; 
@@ -24,157 +22,10 @@ static int originalSleepTimeout = 60;
 static bool isViewingFile = false; 
 static int selectedOtaIndex = -1; 
 
-bool connectWiFiHelper() {
-    if (WiFi.status() == WL_CONNECTED) return true;
-
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(); 
-
-    char* msg_buf = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
-    if (!msg_buf) msg_buf = (char*)malloc(128);
-    strcpy(msg_buf, "Connecting to saved WiFi...\nWait up to 10s...");
-    
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.showProgressPopup("WIFI INIT", msg_buf, 0);
-        xSemaphoreGive(xGuiSemaphore);
-    } else {
-        heap_caps_free(msg_buf);
-    }
-
-    int attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-        attempts++;
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA) {
-            WiFi.disconnect();
-            return false;
-        }
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-            display.closeProgressPopup();
-            xSemaphoreGive(xGuiSemaphore);
-        }
-        return true;
-    }
-
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.disconnect(); 
-    vTaskDelay(pdMS_TO_TICKS(100));
-
-    msg_buf = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
-    if (!msg_buf) msg_buf = (char*)malloc(128);
-    strcpy(msg_buf, "Scanning WiFi networks...\nPlease wait...");
-    
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.showProgressPopup("SCANNING", msg_buf, 0);
-        xSemaphoreGive(xGuiSemaphore);
-    } else {
-        heap_caps_free(msg_buf);
-    }
-
-    int n = WiFi.scanNetworks();
-    String options = "";
-    if (n == 0) {
-        options = "<option value=''>Khong tim thay mang nao!</option>";
-    } else {
-        for (int i = 0; i < n; ++i) {
-            String ssid = WiFi.SSID(i);
-            if(ssid.length() > 0) {
-                options += "<option value='" + ssid + "'>" + ssid + " (" + String(WiFi.RSSI(i)) + "dBm)</option>";
-            }
-        }
-    }
-    WiFi.scanDelete(); 
-
-    WiFi.softAP("REMOTE_LAMP"); 
-
-    msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
-    if (!msg_buf) msg_buf = (char*)malloc(256);
-    strcpy(msg_buf, "1. Ket noi WiFi: REMOTE_LAMP\n2. Mo trinh duyet web\n3. Truy cap: 192.168.4.1\nDe chon mang & nhap pass!");
-    
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.showProgressPopup("WEB SETUP", msg_buf, 0);
-        xSemaphoreGive(xGuiSemaphore);
-    } else {
-        heap_caps_free(msg_buf);
-    }
-
-    WebServer server(80);
-    static bool wifiSetupDone = false;
-    wifiSetupDone = false;
-
-    server.on("/", [&server, options]() {
-        String html = "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width, initial-scale=1'>"
-                      "<style>body{font-family:sans-serif;text-align:center;margin-top:50px;background:#222;color:#fff;}"
-                      "select,input{padding:12px;margin:8px;width:80%;max-width:300px;border-radius:6px;border:none;font-size:16px;}</style></head>"
-                      "<body><h2>CHON WIFI NHA BAC</h2>"
-                      "<form action='/save'>"
-                      "<select name='ssid' required>" + options + "</select><br>"
-                      "<input type='password' name='pass' placeholder='Mat khau WiFi (Neu co)'><br>"
-                      "<input type='submit' value='KET NOI NGAY' style='background:#ff7200;color:#fff;font-weight:bold;cursor:pointer;'></form>"
-                      "</body></html>";
-        server.send(200, "text/html", html);
-    });
-
-    server.on("/save", [&server]() {
-        String qsid = server.arg("ssid");
-        String qpass = server.arg("pass");
-        
-        server.send(200, "text/html", "<html><body style='text-align:center;margin-top:50px;font-family:sans-serif;background:#222;color:#fff;'><h2>Da luu! Dang ket noi...</h2><p>Ban co the dong trang web nay.</p></body></html>");
-        
-        vTaskDelay(pdMS_TO_TICKS(500));
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(qsid.c_str(), qpass.c_str());
-        wifiSetupDone = true;
-    });
-
-    server.begin();
-
-    while (!wifiSetupDone) {
-        server.handleClient();
-        vTaskDelay(pdMS_TO_TICKS(20)); 
-        
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA) {
-            server.stop();
-            WiFi.softAPdisconnect(true);
-            WiFi.disconnect();
-            return false;
-        }
-    }
-
-    server.stop();
-
-    msg_buf = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
-    if (!msg_buf) msg_buf = (char*)malloc(128);
-    strcpy(msg_buf, "Received new WiFi credentials!\nConnecting...");
-    
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.showProgressPopup("WIFI LINKING", msg_buf, 50);
-        xSemaphoreGive(xGuiSemaphore);
-    } else {
-        heap_caps_free(msg_buf);
-    }
-
-    attempts = 0;
-    while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-        attempts++;
-    }
-    
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.closeProgressPopup();
-        xSemaphoreGive(xGuiSemaphore);
-    }
-    return WiFi.status() == WL_CONNECTED;
-}
-
 void stockUpdateTask(void *pvParameters) {
     while (1) {
         if (appState.currentMenu == MENU_STOCK) {
-            if (!connectWiFiHelper()) {
+            if (!webServer.runWiFiSetup()) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 continue;
             }
@@ -200,7 +51,7 @@ void otaUpdateTask(void *pvParameters) {
     bool listFetched = false;
     while (1) {
         if (appState.currentMenu == MENU_OTA) {
-            if (!connectWiFiHelper()) {
+            if (!webServer.runWiFiSetup()) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 continue;
             }
@@ -246,170 +97,6 @@ void otaUpdateTask(void *pvParameters) {
             vTaskDelete(NULL);
         }
     }
-}
-
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đổi Hình Nền ESP32</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; background: #222; color: #fff; margin: 0; padding: 20px; }
-        canvas { border: 2px solid #ff7200; border-radius: 8px; margin-top: 15px; max-width: 100%; box-shadow: 0px 4px 10px rgba(0,0,0,0.5); }
-        .btn { background: #ff7200; color: #fff; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 15px; width: 100%; max-width: 240px; }
-        .btn:disabled { background: #555; cursor: not-allowed; }
-        input[type="file"] { display: none; }
-        .upload-label { display: inline-block; background: #444; color: #fff; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; width: calc(100% - 48px); max-width: 192px; border: 1px solid #777; }
-        #status { margin-top: 15px; color: #00ff00; font-weight: bold; font-size: 14px; }
-    </style>
-</head>
-<body>
-    <h2>ĐỔI HÌNH NỀN (Tự Động Crop)</h2>
-    <label class="upload-label">
-        <input type="file" id="fileInput" accept="image/jpeg, image/png">
-        CHỌN ẢNH TỪ MÁY
-    </label>
-    <br>
-    <canvas id="canvas" width="240" height="240"></canvas>
-    <br>
-    <button id="uploadBtn" class="btn" disabled>TẢI LÊN MÀN HÌNH</button>
-    <div id="status"></div>
-
-    <script>
-        const fileInput = document.getElementById('fileInput');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const statusDiv = document.getElementById('status');
-        let rgb565Data = null;
-
-        ctx.fillStyle = '#333';
-        ctx.fillRect(0, 0, 240, 240);
-        ctx.fillStyle = '#aaa';
-        ctx.font = '16px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Ảnh xem trước (240x240)', 120, 120);
-
-        fileInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const img = new Image();
-                img.onload = function() {
-                    const scale = Math.max(240 / img.width, 240 / img.height);
-                    const w = img.width * scale;
-                    const h = img.height * scale;
-                    const x = (240 - w) / 2;
-                    const y = (240 - h) / 2;
-                    
-                    ctx.clearRect(0, 0, 240, 240);
-                    ctx.drawImage(img, x, y, w, h);
-                    
-                    const imgData = ctx.getImageData(0, 0, 240, 240).data;
-                    rgb565Data = new Uint8Array(240 * 240 * 2); 
-                    
-                    let j = 0;
-                    for (let i = 0; i < imgData.length; i += 4) {
-                        const r = imgData[i] >> 3;
-                        const g = imgData[i+1] >> 2;
-                        const b = imgData[i+2] >> 3;
-                        const rgb565 = (r << 11) | (g << 5) | b;
-                        
-                        rgb565Data[j++] = rgb565 & 0xFF;
-                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF;
-                    }
-                    
-                    uploadBtn.disabled = false;
-                    statusDiv.style.color = '#fff';
-                    statusDiv.innerText = 'Đã dịch xong màu! Sẵn sàng tải lên.';
-                }
-                img.src = event.target.result;
-            }
-            reader.readAsDataURL(file);
-        });
-
-        uploadBtn.addEventListener('click', function() {
-            if (!rgb565Data) return;
-            uploadBtn.disabled = true;
-            statusDiv.innerText = 'Đang bắn file qua WiFi... Chờ xíu!';
-            statusDiv.style.color = '#ff7200';
-
-            const blob = new Blob([rgb565Data], { type: 'application/octet-stream' });
-            const formData = new FormData();
-            formData.append('bg', blob, 'bg.bin');
-
-            fetch('/upload', { method: 'POST', body: formData })
-            .then(response => {
-                if(response.ok) {
-                    statusDiv.style.color = '#00ff00';
-                    statusDiv.innerText = 'XONG! Màn hình đang tự khởi động lại...';
-                } else throw new Error('Upload failed');
-            })
-            .catch(error => {
-                statusDiv.style.color = 'red';
-                statusDiv.innerText = 'Lỗi mạng: ' + error.message;
-                uploadBtn.disabled = false;
-            });
-        });
-    </script>
-</body>
-</html>
-)rawliteral";
-
-void uploadBgTask(void *pvParameters) {
-    sd_bg.begin(SD_CS_PIN); 
-
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP("REMOTE_LAMP_BG"); 
-
-    char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
-    if (!msg_buf) msg_buf = (char*)malloc(256);
-    strcpy(msg_buf, "1. Ket noi WiFi: REMOTE_LAMP_BG\n2. Mo trinh duyet web\n3. Truy cap: 192.168.4.1\nDe chon anh tu dien thoai!");
-    
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.showProgressPopup("CHANGE BACKGROUND", msg_buf, 0);
-        xSemaphoreGive(xGuiSemaphore);
-    } else heap_caps_free(msg_buf);
-
-    WebServer server(80);
-    FsFile uploadFile; 
-
-    server.on("/", HTTP_GET, [&server]() {
-        server.send(200, "text/html", index_html);
-    });
-
-    server.on("/upload", HTTP_POST, [&server]() {
-        server.send(200, "text/plain", "OK");
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        ESP.restart(); 
-    }, [&server, &uploadFile]() {
-        HTTPUpload& upload = server.upload();
-        if (upload.status == UPLOAD_FILE_START) {
-            if (sd_bg.exists("/bg.bin")) sd_bg.remove("/bg.bin"); 
-            uploadFile = sd_bg.open("/bg.bin", O_WRITE | O_CREAT);
-        } else if (upload.status == UPLOAD_FILE_WRITE) {
-            if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
-        } else if (upload.status == UPLOAD_FILE_END) {
-            if (uploadFile) uploadFile.close(); 
-        }
-    });
-
-    server.begin();
-
-    while (appState.currentMenu == MENU_UPLOAD_BG) {
-        server.handleClient();
-        vTaskDelay(pdMS_TO_TICKS(20));
-    }
-
-    server.stop();
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_OFF);
-    bgUploadTaskHandle = NULL;
-    vTaskDelete(NULL);
 }
 
 void AppLogic::begin() {
@@ -607,9 +294,7 @@ void AppLogic::enterMenu(int level) {
             }
         } else if (level == MENU_UPLOAD_BG) {
             isViewingFile = false;
-            if (bgUploadTaskHandle == NULL) {
-                xTaskCreatePinnedToCore(uploadBgTask, "BgUpload", STACK_NETWORK, NULL, PRIO_NETWORK, &bgUploadTaskHandle, 1);
-            }
+            webServer.runBgUpload();
         }
         return; 
     }
@@ -618,7 +303,6 @@ void AppLogic::enterMenu(int level) {
     else if (level == MENU_CONTROL) encoder.setBoundaries(0, 4, true); 
     else if (level == MENU_LAMP) encoder.setBoundaries(0, 4, true);    
     else if (level == MENU_USB_MODE) {
-        // CÚ CHỐT: Mỗi khi vào SD Explorer là tự động load lại toàn bộ danh sách file
         storage.loadFiles(); 
         encoder.setBoundaries(0, storage.fileCount, true);
     }

@@ -1,5 +1,5 @@
-#ifndef OTA_LOGIC_H
-#define OTA_LOGIC_H
+#ifndef OTA_H
+#define OTA_H
 
 #include <Arduino.h>
 

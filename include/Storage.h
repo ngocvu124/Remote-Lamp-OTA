@@ -1,5 +1,5 @@
-#ifndef STORAGE_LOGIC_H
-#define STORAGE_LOGIC_H
+#ifndef STORAGE_H
+#define STORAGE_H
 
 #include <Arduino.h>
 #include "Config.h"

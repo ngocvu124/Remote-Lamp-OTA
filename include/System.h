@@ -1,5 +1,5 @@
-#ifndef SYSTEM_LOGIC_H
-#define SYSTEM_LOGIC_H
+#ifndef SYSTEM_H
+#define SYSTEM_H
 
 #include "Config.h"
 #include "driver/gpio.h"

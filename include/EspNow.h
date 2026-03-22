@@ -1,5 +1,5 @@
-#ifndef ESP_NOW_LOGIC_H
-#define ESP_NOW_LOGIC_H
+#ifndef ESP_NOW_H
+#define ESP_NOW_H
 
 #include <Arduino.h>
 #include "Config.h"

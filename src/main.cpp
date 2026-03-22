@@ -7,6 +7,7 @@
 #include "App.h"
 #include "System.h"
 #include "Storage.h"
+#include "WebSv.h"
 #include <SPI.h>
 
 SemaphoreHandle_t xGuiSemaphore = NULL;
@@ -48,7 +49,7 @@ void inputTask(void *pvParameters) {
 
     while (1) {
         encoder.loop(); 
-        vTaskDelay(pdMS_TO_TICKS(2)); // Trễ 2ms đảm bảo không dội phím
+        vTaskDelay(pdMS_TO_TICKS(2)); 
     }
 }
 
@@ -58,6 +59,8 @@ void inputTask(void *pvParameters) {
 void appTask(void *pvParameters) {
     while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
     vTaskDelay(pdMS_TO_TICKS(500)); 
+
+    webServer.begin(); // CÚ CHỐT: Mount LittleFS tại đây
 
     if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
         pinMode(SD_CS_PIN, OUTPUT);
@@ -76,12 +79,12 @@ void appTask(void *pvParameters) {
     app.begin();     
 
     while (1) {
-        app.handleEvents(); // Xử lý Menu
+        app.handleEvents(); 
         
         if (millis() > 5000 && encoder.shouldSleep(appState.sleepTimeout * 1000UL)) {
             sys.goToSleep(); 
         }
-        vTaskDelay(pdMS_TO_TICKS(20)); // Chạy tà tà không ngốn CPU
+        vTaskDelay(pdMS_TO_TICKS(20)); 
     }
 }
 
@@ -94,7 +97,7 @@ void batteryTask(void *pvParameters) {
 
     while (1) {
         battery.update(appState); 
-        vTaskDelay(pdMS_TO_TICKS(5000)); // Cứ 5 giây mới đo 1 lần cho rảnh nợ
+        vTaskDelay(pdMS_TO_TICKS(5000)); 
     }
 }
 
@@ -107,7 +110,6 @@ void espNowTask(void *pvParameters) {
     
     struct_message msg;
     while (1) {
-        // CÚ CHỐT: Đứng im đợi thư. Nếu xQueueReceive nhận được thư thì mới gửi!
         if (xQueueReceive(xEspNowQueue, &msg, portMAX_DELAY) == pdPASS) {
             espNow.sendInternal(msg); 
         }

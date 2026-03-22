@@ -1,5 +1,5 @@
-#ifndef STOCK_LOGIC_H
-#define STOCK_LOGIC_H
+#ifndef STOCK_H
+#define STOCK_H
 
 #include <Arduino.h>
 #include <lvgl.h>
