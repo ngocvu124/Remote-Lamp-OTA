@@ -37,7 +37,7 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 }
 
 void DisplayLogic::begin() {
-    Serial.println("[DISPLAY] Initializing ST7789...");
+    Serial.println("[DISPLAY] Initializing ST7789 (240x240)...");
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
@@ -46,6 +46,7 @@ void DisplayLogic::begin() {
     SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
     tft.init(240, 240); 
     tft.setRotation(0); 
+    tft.invertDisplay(true);
 
     lv_init();
 
