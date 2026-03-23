@@ -8,27 +8,34 @@ extern SdFs sd_bg;
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
     
-    // Đảm bảo các chân CS được kéo cao ngay từ đầu để không tranh chấp
-    pinMode(SD_CS_PIN, OUTPUT);
-    digitalWrite(SD_CS_PIN, HIGH);
+    // Khóa tịt màn hình lại để không tranh chấp Bus SPI
     pinMode(SCR_CS_PIN, OUTPUT);
     digitalWrite(SCR_CS_PIN, HIGH);
+    
+    pinMode(SD_CS_PIN, OUTPUT);
+    digitalWrite(SD_CS_PIN, HIGH);
+    
+    delay(50); // Xả sạch nhiễu trên Bus SPI
 
-    // Dùng tốc độ 8MHz để đảm bảo KHÔNG TREO bus khi dây dẫn không chuẩn
+    // Thử mount ở tốc độ 8MHz, nếu dây dài tín hiệu kém tự động lùi về 4MHz để cứu vãn
     if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(8)))) {
         isReady = true;
-        Serial.println("[STORAGE] SD Mount OK!");
-        
-        if (!sd_bg.exists("/background")) {
-            sd_bg.mkdir("/background");
-        }
-        
-        loadFiles();
-        loadBgFiles(); 
+        Serial.println("[STORAGE] SD Mount OK (8MHz)!");
+    } else if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)))) {
+        isReady = true;
+        Serial.println("[STORAGE] SD Mount OK (4MHz Fallback)!");
     } else {
         isReady = false;
-        Serial.println("[STORAGE] SD Mount FAILED!");
+        Serial.println("[STORAGE] SD Mount FAILED! Vui lòng kiểm tra lại chân cắm.");
+        return;
     }
+
+    if (!sd_bg.exists("/background")) {
+        sd_bg.mkdir("/background");
+    }
+    
+    loadFiles();
+    loadBgFiles(); 
 }
 
 void StorageLogic::loadFiles() {
@@ -36,21 +43,21 @@ void StorageLogic::loadFiles() {
     fileCount = 0;
     FsFile dir = sd_bg.open("/"); 
     if (!dir) return;
-    dir.rewind();
-
-    FsFile file;
-    while (file.openNext(&dir, O_READ)) {
-        char name[32];
-        file.getName(name, 32);
-        if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
-            if (fileCount < 14) {
-                strcpy(fileNames[fileCount], name);
+    dir.rewindDirectory();
+    
+    while (fileCount < 15) {
+        FsFile file = dir.openNextFile();
+        if (!file) break;
+        if (!file.isDirectory()) {
+            file.getName(fileNames[fileCount], 32);
+            if (String(fileNames[fileCount]) != "config.json" && String(fileNames[fileCount]) != "bg.bin") {
                 fileCount++;
             }
         }
         file.close();
     }
     dir.close();
+    Serial.printf("[STORAGE] Loaded %d files in ROOT\n", fileCount);
 }
 
 void StorageLogic::loadBgFiles() {
@@ -58,45 +65,35 @@ void StorageLogic::loadBgFiles() {
     bgFileCount = 0;
     FsFile dir = sd_bg.open("/background"); 
     if (!dir) return;
-    dir.rewind();
-
-    FsFile file;
-    while (file.openNext(&dir, O_READ)) {
-        char name[32];
-        file.getName(name, 32);
-        if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
-            if (bgFileCount < 15) {
-                strcpy(bgFileNames[bgFileCount], name);
-                bgFileCount++;
-            }
+    dir.rewindDirectory();
+    
+    while (bgFileCount < 15) {
+        FsFile file = dir.openNextFile();
+        if (!file) break;
+        if (!file.isDirectory()) {
+            file.getName(bgFileNames[bgFileCount], 32);
+            bgFileCount++;
         }
         file.close();
     }
     dir.close();
+    Serial.printf("[STORAGE] Loaded %d files in /background\n", bgFileCount);
 }
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
     if (!isReady) return NULL;
     FsFile file = sd_bg.open(filename, O_READ);
-    if (!file) {
-        char path[64];
-        sprintf(path, "/%s", filename);
-        file = sd_bg.open(path, O_READ);
-    }
     if (!file) return NULL;
 
-    if (strstr(filename, ".bin") != NULL) {
+    size_t fileSize = file.size();
+    if (fileSize == 0 || fileSize > 1024 * 1024) { 
         file.close();
-        char* buffer = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if(buffer) strcpy(buffer, "[BINARY FILE] - Cannot preview text.");
-        return buffer;
+        return NULL;
     }
 
-    size_t size = file.size();
-    size_t readSize = size > 2048 ? 2048 : size;
-    char* buffer = (char*)heap_caps_malloc(readSize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    char* buffer = (char*)heap_caps_malloc(fileSize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (buffer) {
-        file.read(buffer, readSize);
+        size_t readSize = file.read(buffer, fileSize);
         buffer[readSize] = '\0'; 
     }
     file.close();
@@ -129,16 +126,20 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         StaticJsonDocument<512> doc;
         DeserializationError error = deserializeJson(doc, file);
         if (!error) {
-            state.sleepTimeout = doc["sleepTimeout"] | 30;
+            state.sleepTimeout = doc["sleepTimeout"] | 60;
             state.oledBrightness = doc["oledBrightness"] | 50;
             state.brightness = doc["brightness"] | 50;
             state.temperature = doc["temperature"] | 50;
-            if (doc.containsKey("bgFilePath")) {
-                strlcpy(state.bgFilePath, doc["bgFilePath"], sizeof(state.bgFilePath));
+            const char* bg = doc["bgFilePath"];
+            if (bg) {
+                strncpy(state.bgFilePath, bg, sizeof(state.bgFilePath));
+            } else {
+                strcpy(state.bgFilePath, "/bg.bin");
             }
         }
         file.close();
         return true;
     }
+    strcpy(state.bgFilePath, "/bg.bin");
     return false;
 }
