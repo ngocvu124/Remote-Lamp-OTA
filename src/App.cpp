@@ -20,13 +20,45 @@ extern SdFs sd_bg;
 static int originalSleepTimeout = 60; 
 static bool isViewingFile = false; 
 static bool isViewingImage = false; 
+static int selectedOtaIndex = -1; 
+
+void stockUpdateTask(void *pvParameters) {
+    while (1) {
+        if (appState.currentMenu == MENU_STOCK) {
+            if (!webServer.runWiFiSetup()) { vTaskDelay(pdMS_TO_TICKS(1000)); continue; }
+            char ticker[15]; stock.getTickerName(appState.stockIndex, ticker); 
+            if (ticker[0] != '-') {
+                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                    stock.fetchAndUpdateUI(appState.stockIndex); 
+                    xSemaphoreGive(xGuiSemaphore);
+                }
+                vTaskDelay(pdMS_TO_TICKS(15000));
+            } else vTaskDelay(pdMS_TO_TICKS(500)); 
+        } else { stockTaskHandle = NULL; vTaskDelete(NULL); }
+    }
+}
+
+void otaUpdateTask(void *pvParameters) {
+    while (1) {
+        if (appState.currentMenu == MENU_OTA) {
+            if (!webServer.runWiFiSetup()) { vTaskDelay(pdMS_TO_TICKS(1000)); continue; }
+            if (selectedOtaIndex >= 0) {
+                int idx = selectedOtaIndex; selectedOtaIndex = -1;
+                ota.begin(ota.versions[idx].url);
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));
+        } else { otaTaskHandle = NULL; vTaskDelete(NULL); }
+    }
+}
 
 void AppLogic::begin() {
-    storage.begin();
-    storage.loadConfig(appState);
-    display.setContrast(appState.oledBrightness);
-    display.loadBackgroundFromSD();
-    encoder.setBoundaries(0, 100, false);
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+        display.loadBackgroundFromSD(); 
+        encoder.setBoundaries(0, 100, false);
+        encoder.setEncoderValue(appState.brightness);
+        display.updateUI(appState);
+        xSemaphoreGive(xGuiSemaphore);
+    }
 }
 
 void AppLogic::handleEvents() {
@@ -35,7 +67,7 @@ void AppLogic::handleEvents() {
         if (event == ENC_LONG_PRESS) {
             if (isViewingFile || isViewingImage) {
                 isViewingFile = false; isViewingImage = false; 
-                display.forceRebuild();
+                display.showFileContent(NULL, NULL); display.closeImagePreview();
             } else {
                 if (appState.currentMenu == MENU_NONE) enterMenu(MENU_MAIN);
                 else exitMenu();
@@ -57,6 +89,7 @@ void AppLogic::handleEvents() {
                 }
             } else {
                 appState.menuIndex = encoder.getEncoderValue();
+                if (appState.currentMenu == MENU_STOCK) appState.stockIndex = appState.menuIndex;
             }
         }
 
@@ -64,14 +97,25 @@ void AppLogic::handleEvents() {
             switch (appState.currentMenu) {
                 case MENU_MAIN:
                     if (appState.menuIndex == 0) enterMenu(MENU_CONTROL);
+                    else if (appState.menuIndex == 1) enterMenu(MENU_LAMP);
                     else if (appState.menuIndex == 2) enterMenu(MENU_USB_MODE); 
+                    else if (appState.menuIndex == 3) enterMenu(MENU_STOCK);
                     else if (appState.menuIndex == 4) enterMenu(MENU_OTA); 
                     else if (appState.menuIndex == 5) enterMenu(MENU_WEB_SERVER); 
-                    else if (appState.menuIndex == 6) exitMenu();
+                    else exitMenu(); 
                     break;
                 case MENU_CONTROL:
-                    if (appState.menuIndex == 3) enterMenu(MENU_SELECT_BG);
-                    else if (appState.menuIndex == 4) enterMenu(MENU_MAIN);
+                    if (appState.menuIndex == 0) enterMenu(MENU_SET_SLEEP);
+                    else if (appState.menuIndex == 1) enterMenu(MENU_SET_BACKLIGHT);
+                    else if (appState.menuIndex == 3) enterMenu(MENU_SELECT_BG); 
+                    else enterMenu(MENU_MAIN);
+                    break;
+                case MENU_LAMP:
+                    if (appState.menuIndex == 4) enterMenu(MENU_MAIN);
+                    else {
+                        char cmds[] = {'R','U','W','E'};
+                        espNow.send(0, appState.brightness, appState.temperature, cmds[appState.menuIndex]);
+                    }
                     break;
                 case MENU_SELECT_BG:
                     if (appState.menuIndex == storage.bgFileCount) enterMenu(MENU_CONTROL);
@@ -86,9 +130,17 @@ void AppLogic::handleEvents() {
                         }
                     }
                     break;
+                case MENU_USB_MODE:
+                    if (appState.menuIndex == storage.fileCount) enterMenu(MENU_MAIN);
+                    else {
+                        char* f = storage.fileNames[appState.menuIndex];
+                        if (strstr(f, ".bin")) { FsFile file = sd_bg.open(f, O_READ); if(file){ isViewingImage = display.showImagePreview(file); file.close(); }}
+                        else { isViewingFile = true; display.showFileContent(f, storage.readFileToPSRAM(f)); }
+                    }
+                    break;
                 case MENU_OTA:
                     if (appState.menuIndex == ota.versionCount) enterMenu(MENU_MAIN);
-                    else ota.begin(ota.versions[appState.menuIndex].url);
+                    else selectedOtaIndex = appState.menuIndex;
                     break;
                 case MENU_NONE:
                     appState.isTempMode = !appState.isTempMode;
@@ -97,12 +149,10 @@ void AppLogic::handleEvents() {
             }
         }
     }
-    // Chỉ cập nhật UI khi không xem ảnh để tránh giật lag
-    if (!isViewingImage) {
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
-            display.updateUI(appState);
-            xSemaphoreGive(xGuiSemaphore);
-        }
+
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+        display.updateUI(appState);
+        xSemaphoreGive(xGuiSemaphore);
     }
 }
 
@@ -112,7 +162,9 @@ void AppLogic::enterMenu(int level) {
     if (level == MENU_MAIN) encoder.setBoundaries(0, 6, true);
     else if (level == MENU_CONTROL) encoder.setBoundaries(0, 4, true);
     else if (level == MENU_SELECT_BG) { storage.loadBgFiles(); encoder.setBoundaries(0, storage.bgFileCount, true); }
-    else if (level == MENU_OTA) { ota.fetchVersions(); encoder.setBoundaries(0, ota.versionCount, true); }
+    else if (level == MENU_STOCK) { if(!stockTaskHandle) xTaskCreatePinnedToCore(stockUpdateTask, "StockTask", 8192, NULL, 2, &stockTaskHandle, 1); encoder.setBoundaries(0, 19, true); }
+    else if (level == MENU_OTA) { ota.fetchVersions(); if(!otaTaskHandle) xTaskCreatePinnedToCore(otaUpdateTask, "OtaTask", 8192, NULL, 2, &otaTaskHandle, 1); encoder.setBoundaries(0, ota.versionCount, true); }
+    else if (level == MENU_WEB_SERVER) { webServer.runBgUpload(); }
     encoder.setEncoderValue(0);
 }
 
@@ -120,5 +172,5 @@ void AppLogic::exitMenu() {
     appState.currentMenu = MENU_NONE;
     storage.saveConfig(appState);
     encoder.setBoundaries(0, 100, false);
-    encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
+    encoder.setEncoderValue(appState.brightness);
 }

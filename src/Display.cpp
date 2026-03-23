@@ -20,6 +20,9 @@ static uint8_t* preview_data_buffer = NULL;
 static lv_img_dsc_t preview_img_dsc;        
 static lv_obj_t* preview_img_obj = NULL;    
 
+// BIẾN BỊ THIẾU GÂY LỖI:
+static lv_obj_t * file_overlay = NULL;
+
 #define BACKLIGHT_CHANNEL 0 
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
@@ -42,6 +45,7 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 }
 
 void DisplayLogic::begin() {
+    Serial.println("[DISPLAY] Initializing ST7789 (240x240)...");
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
@@ -53,6 +57,7 @@ void DisplayLogic::begin() {
     tft.invertDisplay(true);
 
     lv_init();
+
     buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     if (!buf1) buf1 = (lv_color_t*)malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t)); 
     lv_disp_draw_buf_init(&draw_buf, buf1, NULL, SCREEN_WIDTH * 40);
@@ -72,22 +77,28 @@ void DisplayLogic::begin() {
     lv_indev_drv_register(&indev_drv);
 
     ui_init(); 
+    
     scr_image_preview = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
+
+    Serial.println("[DISPLAY] LVGL UI Initialized.");
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
-    // Chỉ nạp nếu lấy được Semaphore trong tích tắc, nếu không bỏ qua để tránh treo máy
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)));
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+        if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)))) {
+            xSemaphoreGive(xGuiSemaphore);
+            return; 
+        }
+        
         FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
         if (!file) file = sd_bg.open("/bg.bin", O_READ);
 
         if (file && file.size() >= 115200) {
-            if (bg_data_buffer) heap_caps_free(bg_data_buffer);
+            if (bg_data_buffer != NULL) { heap_caps_free(bg_data_buffer); }
             bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            
             if (bg_data_buffer) {
-                // Đọc cực nhanh vào PSRAM
                 file.read(bg_data_buffer, 115200);
                 custom_bg.header.always_zero = 0;
                 custom_bg.header.w = 240;
@@ -114,6 +125,7 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
     for(int i = 0; i < count; i++) {
         lv_obj_t * btn = lv_btn_create(objects.cont_menu_text);
         lv_obj_set_size(btn, 220, 35); 
+        lv_obj_set_style_bg_color(btn, lv_color_hex(0x222222), 0); 
         lv_obj_t * label = lv_label_create(btn);
         lv_label_set_text(label, items[i]);
         lv_obj_center(label); 
@@ -121,25 +133,29 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
     }
 }
 
-void DisplayLogic::forceRebuild() { lastMenuType = (MenuLevel)-1; }
-
 void DisplayLogic::updateUI(RemoteState &state) {
     if (state.currentMenu == MENU_STOCK) {
         if (lv_scr_act() != objects.stock) lv_scr_load(objects.stock);
+        if (objects.stock_roller) lv_roller_set_selected(objects.stock_roller, state.stockIndex, LV_ANIM_ON);
         return;
     }
 
     if (state.currentMenu == MENU_NONE || state.currentMenu == MENU_SET_SLEEP || state.currentMenu == MENU_SET_BACKLIGHT) {
         if (lv_scr_act() != objects.main) lv_scr_load(objects.main);
         lv_bar_set_value(objects.ui_batbar, state.batteryLevel, LV_ANIM_ON);
-        int val = (state.currentMenu == MENU_SET_SLEEP) ? (state.sleepTimeout-30)*100/270 : 
-                  (state.currentMenu == MENU_SET_BACKLIGHT) ? state.oledBrightness :
-                  (state.isTempMode ? state.temperature : state.brightness);
+        lv_label_set_text_fmt(objects.bat_value, "%d%%", state.batteryLevel);
+        
+        int val = 0;
+        if (state.currentMenu == MENU_SET_SLEEP) val = (state.sleepTimeout - 30) * 100 / 270;
+        else if (state.currentMenu == MENU_SET_BACKLIGHT) val = state.oledBrightness;
+        else val = state.isTempMode ? state.temperature : state.brightness;
+
         lv_arc_set_value(objects.arc_value, val);
         lv_label_set_text_fmt(objects.value, "%d%%", val);
     } 
     else {
         if (lv_scr_act() != objects.menu) lv_scr_load(objects.menu);
+
         if (state.currentMenu != lastMenuType) {
             if (state.currentMenu == MENU_MAIN) buildMenu(mainMenuItems, 7); 
             else if (state.currentMenu == MENU_CONTROL) buildMenu(controlMenuItems, 5);
@@ -160,6 +176,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
             }
             lastMenuType = state.currentMenu;
         }
+
         for (int i = 0; i < currentMenuCount; i++) {
             if (i == state.menuIndex) lv_obj_add_state(menuButtons[i], LV_STATE_CHECKED);
             else lv_obj_clear_state(menuButtons[i], LV_STATE_CHECKED);
@@ -169,20 +186,38 @@ void DisplayLogic::updateUI(RemoteState &state) {
 
 void DisplayLogic::setContrast(int level) { ledcWrite(BACKLIGHT_CHANNEL, map(level, 0, 100, 0, 255)); }
 void DisplayLogic::turnOff() { ledcWrite(BACKLIGHT_CHANNEL, 0); tft.enableDisplay(false); }
+void DisplayLogic::forceRebuild() { lastMenuType = (MenuLevel)-1; }
 
 void DisplayLogic::showFileContent(const char* title, const char* content) {
-    if (title && content) {
-        lv_obj_t * overlay = lv_obj_create(lv_scr_act());
-        lv_obj_set_size(overlay, 220, 220);
-        lv_obj_center(overlay);
-        lv_obj_t * lbl = lv_label_create(overlay);
-        lv_label_set_text(lbl, content);
-        lv_obj_set_width(lbl, 200);
+    if (file_overlay) {
+        lv_obj_del(file_overlay);
+        file_overlay = NULL;
     }
+    if (content == NULL) return;
+
+    file_overlay = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(file_overlay, 230, 230);
+    lv_obj_center(file_overlay);
+    lv_obj_set_style_bg_color(file_overlay, lv_color_hex(0x111111), 0);
+    
+    lv_obj_t * lbl = lv_label_create(file_overlay);
+    lv_label_set_text(lbl, content);
+    lv_obj_set_width(lbl, 200);
+    lv_obj_align(lbl, LV_ALIGN_TOP_LEFT, 0, 30);
 }
 
 void DisplayLogic::showProgressPopup(const char* title, const char* msg, int percent) {
-    // Tạm thời để trống để dồn tài nguyên cho việc chọn Menu
+    // Popup dành cho OTA và Web
+    static lv_obj_t* ota_overlay = NULL;
+    if (ota_overlay) {
+        lv_obj_del(ota_overlay);
+        ota_overlay = NULL;
+    }
+    ota_overlay = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(ota_overlay, 220, 150);
+    lv_obj_center(ota_overlay);
+    lv_obj_t* l = lv_label_create(ota_overlay);
+    lv_label_set_text(l, msg);
 }
 
 void DisplayLogic::closeProgressPopup() {}
@@ -191,22 +226,30 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     if(!file) return false;
     if (preview_data_buffer) heap_caps_free(preview_data_buffer);
     preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    
     if (preview_data_buffer) {
-        file.read(preview_data_buffer, 115200);
-        preview_img_dsc.header.always_zero = 0;
-        preview_img_dsc.header.w = 240;
-        preview_img_dsc.header.h = 240;
-        preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-        preview_img_dsc.data_size = 115200;
-        preview_img_dsc.data = preview_data_buffer;
-        if (!preview_img_obj) preview_img_obj = lv_img_create(scr_image_preview);
-        lv_img_set_src(preview_img_obj, &preview_img_dsc);
-        lv_scr_load(scr_image_preview);
-        return true;
+        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+            file.read(preview_data_buffer, 115200);
+            preview_img_dsc.header.always_zero = 0;
+            preview_img_dsc.header.w = 240;
+            preview_img_dsc.header.h = 240;
+            preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
+            preview_img_dsc.data_size = 115200;
+            preview_img_dsc.data = preview_data_buffer;
+
+            if (!preview_img_obj) preview_img_obj = lv_img_create(scr_image_preview);
+            lv_img_set_src(preview_img_obj, &preview_img_dsc);
+            lv_scr_load(scr_image_preview);
+            xSemaphoreGive(xGuiSemaphore);
+            return true;
+        }
     }
     return false;
 }
 
 void DisplayLogic::closeImagePreview() {
-    if (preview_data_buffer) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
+    if (preview_data_buffer) { 
+        heap_caps_free(preview_data_buffer); 
+        preview_data_buffer = NULL; 
+    }
 }
