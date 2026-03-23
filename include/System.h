@@ -7,7 +7,6 @@ class SystemLogic {
 public:
     void begin();
     void goToSleep();
-    void update(); // Kiểm tra timer để đi ngủ
 };
 
 extern SystemLogic sys;

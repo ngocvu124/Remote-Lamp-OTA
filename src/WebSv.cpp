@@ -2,7 +2,6 @@
 #include "Config.h"
 #include "Display.h"
 #include "Storage.h"
-#include "System.h" // THÊM DÒNG NÀY ĐỂ KẾT NỐI BIẾN appState
 #include <WiFi.h>
 #include <WebServer.h>
 #include <LittleFS.h>
@@ -14,8 +13,11 @@ extern SemaphoreHandle_t xGuiSemaphore;
 extern SdFs sd_bg; 
 
 void WebServerLogic::begin() {
-    if (!LittleFS.begin(true)) Serial.println("[WEB] LittleFS Mount Failed!");
-    else Serial.println("[WEB] LittleFS Mount OK!");
+    if (!LittleFS.begin(true)) {
+        Serial.println("[WEB] LittleFS Mount Failed!");
+    } else {
+        Serial.println("[WEB] LittleFS Mount OK!");
+    }
     isRunning = false;
 }
 
@@ -55,6 +57,8 @@ static void webTask(void* pvParameters) {
         });
     } 
     else if (mode == WEB_MODE_UPLOAD) {
+        
+        // --- CÁC ROUTE CŨ: UPLOAD HÌNH NỀN ---
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/upload.html", "r");
             if (!file) { server->send(500, "text/plain", "Missing upload.html"); return; }
@@ -64,6 +68,9 @@ static void webTask(void* pvParameters) {
 
         server->on("/upload", HTTP_POST, [server]() {
             server->send(200, "text/plain", "OK");
+            Serial.println("[WEB] Upload Finished. Applying new background...");
+            
+            // CÚ CHỐT 1: Không khởi động lại ESP nữa, tự động reload lại hình nền ngay lập tức
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 display.loadBackgroundFromSD();
                 xSemaphoreGive(xGuiSemaphore);
@@ -71,14 +78,12 @@ static void webTask(void* pvParameters) {
         }, [server]() {
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
-                String filename = upload.filename;
-                if (!filename.startsWith("/")) filename = "/" + filename;
-                
-                Serial.printf("[WEB] Starting bg upload: %s\n", filename.c_str());
+                Serial.printf("[WEB] Starting bg upload: %s\n", upload.filename.c_str());
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
-                    if (sd_bg.exists(filename.c_str())) sd_bg.remove(filename.c_str());
-                    uploadFile = sd_bg.open(filename.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+                    if (sd_bg.exists("/bg.bin")) sd_bg.remove("/bg.bin");
+                    uploadFile = sd_bg.open("/bg.bin", O_WRITE | O_CREAT | O_TRUNC);
+                    if (uploadFile) Serial.println("[WEB] File /bg.bin opened for overwriting.");
                     xSemaphoreGive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -88,75 +93,17 @@ static void webTask(void* pvParameters) {
                 }
             } else if (upload.status == UPLOAD_FILE_END) {
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                    if (uploadFile) {
-                        uploadFile.close(); 
-                        String filename = upload.filename;
-                        if (!filename.startsWith("/")) filename = "/" + filename;
-                        
-                        FsFile activeFile = sd_bg.open("/active_bg.txt", O_WRITE | O_CREAT | O_TRUNC);
-                        if (activeFile) {
-                            activeFile.print(filename);
-                            activeFile.close();
-                        }
-                        Serial.printf("[WEB] Uploaded and set as active: %s\n", filename.c_str());
-                    }
+                    if (uploadFile) uploadFile.close(); 
                     xSemaphoreGive(xGuiSemaphore);
                 }
             }
         });
 
-        server->on("/files", HTTP_GET, [server]() {
-            File file = LittleFS.open("/files.html", "r");
-            if (!file) { server->send(500, "text/plain", "Missing files.html"); return; }
-            server->streamFile(file, "text/html"); 
-            file.close();
-        });
-
-        server->on("/list", HTTP_GET, [server]() {
+        server->on("/download", HTTP_GET, [server]() {
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                String json = "[";
-                FsFile dir = sd_bg.open("/");
-                if (dir) {
-                    FsFile file;
-                    bool first = true;
-                    dir.rewind();
-                    while (file.openNext(&dir, O_READ)) {
-                        char name[64];
-                        file.getName(name, sizeof(name));
-                        if (String(name) != "System Volume Information" && String(name) != "active_bg.txt") {
-                            if (!first) json += ",";
-                            json += "{\"name\":\"" + String(name) + "\",\"size\":" + String(file.size()) + "}";
-                            first = false;
-                        }
-                        file.close();
-                    }
-                    dir.close();
-                }
-                json += "]";
-                server->send(200, "application/json", json);
-                xSemaphoreGive(xGuiSemaphore);
-            } else server->send(500, "text/plain", "SD busy");
-        });
-
-        server->on("/delete", HTTP_POST, [server]() {
-            String filename = server->arg("filename");
-            if (!filename.startsWith("/")) filename = "/" + filename;
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                if (sd_bg.exists(filename.c_str())) {
-                    if (sd_bg.remove(filename.c_str())) server->send(200, "text/plain", "OK");
-                    else server->send(500, "text/plain", "Delete Failed");
-                } else server->send(404, "text/plain", "File Not Found");
-                xSemaphoreGive(xGuiSemaphore);
-            } else server->send(500, "text/plain", "SD Busy");
-        });
-
-        server->on("/download_file", HTTP_GET, [server]() {
-            String filename = server->arg("filename");
-            if (!filename.startsWith("/")) filename = "/" + filename;
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                FsFile file = sd_bg.open(filename.c_str(), O_READ);
+                FsFile file = sd_bg.open("/bg.bin", O_READ);
                 if (file) {
-                    server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename.substring(1) + "\"");
+                    server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
                     server->sendHeader("Connection", "close");
                     server->setContentLength(file.size());
                     server->send(200, "application/octet-stream", ""); 
@@ -173,6 +120,97 @@ static void webTask(void* pvParameters) {
             } else server->send(500, "text/plain", "SD busy");
         });
 
+        // ==========================================================
+        // --- TÍNH NĂNG QUẢN LÝ FILE TRÊN TRÌNH DUYỆT ---
+        // ==========================================================
+
+        server->on("/files", HTTP_GET, [server]() {
+            File file = LittleFS.open("/files.html", "r");
+            if (!file) { 
+                server->send(500, "text/plain", "Missing files.html"); 
+                return; 
+            }
+            server->streamFile(file, "text/html"); 
+            file.close();
+        });
+
+        server->on("/list", HTTP_GET, [server]() {
+            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                String json = "[";
+                FsFile dir = sd_bg.open("/");
+                if (dir) {
+                    FsFile file;
+                    bool first = true;
+                    dir.rewind();
+                    while (file.openNext(&dir, O_READ)) {
+                        char name[64];
+                        file.getName(name, sizeof(name));
+                        if (String(name) != "System Volume Information") {
+                            if (!first) json += ",";
+                            json += "{\"name\":\"" + String(name) + "\",\"size\":" + String(file.size()) + "}";
+                            first = false;
+                        }
+                        file.close();
+                    }
+                    dir.close();
+                }
+                json += "]";
+                server->send(200, "application/json", json);
+                xSemaphoreGive(xGuiSemaphore);
+            } else {
+                server->send(500, "text/plain", "SD busy");
+            }
+        });
+
+        server->on("/delete", HTTP_POST, [server]() {
+            String filename = server->arg("filename");
+            if (!filename.startsWith("/")) filename = "/" + filename;
+            
+            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                if (sd_bg.exists(filename.c_str())) {
+                    if (sd_bg.remove(filename.c_str())) {
+                        server->send(200, "text/plain", "OK");
+                    } else {
+                        server->send(500, "text/plain", "Delete Failed");
+                    }
+                } else {
+                    server->send(404, "text/plain", "File Not Found");
+                }
+                xSemaphoreGive(xGuiSemaphore);
+            } else {
+                server->send(500, "text/plain", "SD Busy");
+            }
+        });
+
+        server->on("/download_file", HTTP_GET, [server]() {
+            String filename = server->arg("filename");
+            if (!filename.startsWith("/")) filename = "/" + filename;
+            
+            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                FsFile file = sd_bg.open(filename.c_str(), O_READ);
+                if (file) {
+                    server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename.substring(1) + "\"");
+                    server->sendHeader("Connection", "close");
+                    server->setContentLength(file.size());
+                    server->send(200, "application/octet-stream", ""); 
+                    
+                    uint8_t buffer[1024];
+                    int bytesRead;
+                    while (1) {
+                        bytesRead = file.read(buffer, sizeof(buffer));
+                        if (bytesRead <= 0) break;
+                        server->client().write(buffer, bytesRead);
+                    }
+                    file.close();
+                } else {
+                    server->send(404, "text/plain", "File missing");
+                }
+                xSemaphoreGive(xGuiSemaphore);
+            } else {
+                server->send(500, "text/plain", "SD busy");
+            }
+        });
+
         server->on("/upload_file", HTTP_POST, [server]() {
             server->send(200, "text/plain", "OK"); 
         }, [server]() {
@@ -180,6 +218,8 @@ static void webTask(void* pvParameters) {
             if (upload.status == UPLOAD_FILE_START) {
                 String filename = upload.filename;
                 if (!filename.startsWith("/")) filename = "/" + filename;
+                
+                Serial.printf("[WEB] Starting General Upload: %s\n", filename.c_str());
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
                     if (sd_bg.exists(filename.c_str())) sd_bg.remove(filename.c_str()); 
@@ -193,7 +233,10 @@ static void webTask(void* pvParameters) {
                 }
             } else if (upload.status == UPLOAD_FILE_END) {
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                    if (uploadFile) uploadFile.close(); 
+                    if (uploadFile) {
+                        uploadFile.close(); 
+                        Serial.printf("[WEB] General File Uploaded Success: %u bytes\n", upload.totalSize);
+                    }
                     xSemaphoreGive(xGuiSemaphore);
                 }
             }
@@ -205,15 +248,17 @@ static void webTask(void* pvParameters) {
         server->handleClient();
         vTaskDelay(pdMS_TO_TICKS(20));
         if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA) webServer.isRunning = false;
-        if (mode == WEB_MODE_UPLOAD && appState.currentMenu != MENU_WEB_SERVER) webServer.isRunning = false;
+        if (mode == WEB_MODE_UPLOAD && appState.currentMenu != MENU_UPLOAD_BG) webServer.isRunning = false;
     }
     server->stop();
     delete server; 
 
+    // CÚ CHỐT 2: Tự động dọn dẹp sạch sẽ khung Popup thông báo IP trên màn hình khi Task kết thúc
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
         display.closeProgressPopup();
         xSemaphoreGive(xGuiSemaphore);
     }
+
     vTaskDelete(NULL); 
 }
 
@@ -225,7 +270,7 @@ bool WebServerLogic::runWiFiSetup() {
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) return false;
+        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_UPLOAD_BG) return false;
     }
     if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_AP_STA);
@@ -235,34 +280,16 @@ bool WebServerLogic::runWiFiSetup() {
     return WiFi.status() == WL_CONNECTED;
 }
 
-void WebServerLogic::runWebServerOnly() {
-    if (WiFi.status() != WL_CONNECTED) {
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(); 
-        int attempts = 0;
-        while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-            vTaskDelay(pdMS_TO_TICKS(500));
-            attempts++;
-        }
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        String ip = WiFi.localIP().toString();
-        char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
-        sprintf(msg_buf, "Connected to WiFi!\nIP: %s\n\n1. Thay Nen: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str(), ip.c_str());
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-            display.showProgressPopup("WEB DASHBOARD", msg_buf, 0);
-            xSemaphoreGive(xGuiSemaphore);
-        }
-        isRunning = true;
-        xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_UPLOAD, PRIO_WEB, NULL, 1);
-    } else {
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-            display.showProgressPopup("WIFI ERROR", "Loi! Chua co WiFi.\nVui long vao Menu 'Cai dat WiFi' truoc.", 0);
-            xSemaphoreGive(xGuiSemaphore);
-        }
-    }
-}
-
 void WebServerLogic::runBgUpload() {
+    if (!runWiFiSetup()) return;
+    String ip = WiFi.localIP().toString();
+    
+    char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
+    sprintf(msg_buf, "1. Up BG: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str());
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+        display.showProgressPopup("WEB SERVER", msg_buf, 0);
+        xSemaphoreGive(xGuiSemaphore);
+    }
+    isRunning = true;
+    xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_UPLOAD, PRIO_WEB, NULL, 1);
 }

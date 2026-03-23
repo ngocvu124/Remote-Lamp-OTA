@@ -1,5 +1,6 @@
 #include "Encoder.h"
 
+// --- FIX LỖI ENCODER: Khai báo mượn biến Queue từ main ---
 extern QueueHandle_t xEncoderQueue;
 
 EncoderLogic encoder;
@@ -13,23 +14,11 @@ void EncoderLogic::begin() {
     rotaryEncoder.begin();
     rotaryEncoder.setup(readEncoderISR);
     
-    // Mặc định khởi động lên màn hình chính là bật sẵn gia tốc
-    rotaryEncoder.setAcceleration(250); 
+    // CÚ CHỐT 1: Tắt hoàn toàn gia tốc. Vặn 1 khấc là chỉ nhảy 1 đơn vị, cấm nhảy cóc!
+    rotaryEncoder.disableAcceleration(); 
 
     pinMode(ROTARY_BTN_PIN, INPUT_PULLUP);
     lastInteractionTime = millis();
-}
-
-// CÚ CHỐT: Không dùng hàm disableAcceleration() bị lỗi của thư viện nữa!
-void EncoderLogic::setAcceleration(bool enabled) {
-    if (enabled) {
-        // Bật gia tốc: Vặn nhanh thì nhảy số nhanh (dùng chỉnh độ sáng, thời gian)
-        rotaryEncoder.setAcceleration(250);
-    } else {
-        // Tắt gia tốc: Ép thời gian ngưỡng xuống 5ms (người vặn không thể đạt tới tốc độ này)
-        // Núm vặn sẽ tự động nhảy 1 khấc = 1 mục mà không bị dính lỗi đóng băng!
-        rotaryEncoder.setAcceleration(5);
-    }
 }
 
 void EncoderLogic::setBoundaries(int minVal, int maxVal, bool circleValues) {
@@ -50,17 +39,35 @@ bool EncoderLogic::shouldSleep(uint32_t timeout) {
 }
 
 void EncoderLogic::loop() {
+    static uint32_t last_enc_time = 0;
+    
+    // ==========================================
+    // 1. XỬ LÝ VẶN NÚM (CÓ DEBOUNCE CHỐNG RUNG)
+    // ==========================================
     if (rotaryEncoder.encoderChanged()) {
-        int current_val = rotaryEncoder.readEncoder();
-        EncoderEvent ev = (current_val > lastEncoderValue) ? ENC_UP : ENC_DOWN;
-        lastEncoderValue = current_val;
-        lastInteractionTime = millis();
+        uint32_t current_time = millis();
+        
+        // CÚ CHỐT 2: Phải cách nhau ít nhất 30ms mới tính là 1 lần vặn.
+        // Dưới 30ms thì chắc chắn là do lá đồng bên trong đang bị rung (Bouncing)
+        if (current_time - last_enc_time > 30) { 
+            int current_val = rotaryEncoder.readEncoder();
+            EncoderEvent ev = (current_val > lastEncoderValue) ? ENC_UP : ENC_DOWN;
+            lastEncoderValue = current_val;
+            lastInteractionTime = current_time;
+            last_enc_time = current_time;
 
-        if (xEncoderQueue != NULL) {
-            xQueueSend(xEncoderQueue, &ev, 0);
+            if (xEncoderQueue != NULL) {
+                xQueueSend(xEncoderQueue, &ev, 0);
+            }
+        } else {
+            // Nếu phát hiện rung nhiễu, ép nó trả lại giá trị cũ, không cho nhảy số!
+            rotaryEncoder.setEncoderValue(lastEncoderValue);
         }
     }
 
+    // ==========================================
+    // 2. XỬ LÝ BẤM NÚT (CHỐNG NHÁY ĐÚP & LONG PRESS)
+    // ==========================================
     uint8_t currentButtonState = digitalRead(ROTARY_BTN_PIN);
     
     if (currentButtonState != lastButtonState) {
@@ -69,10 +76,13 @@ void EncoderLogic::loop() {
         
         if (currentButtonState != lastButtonState) {
             if (currentButtonState == LOW) { 
+                // Nút bắt đầu bị đè xuống
                 buttonPressTime = millis();
                 isLongPressHandled = false;
             } else { 
+                // Nút được nhả ra
                 if (!isLongPressHandled && (millis() - buttonPressTime < 1000)) {
+                    // Nếu thời gian đè < 1 giây thì tính là Click bình thường
                     lastInteractionTime = millis();
                     EncoderEvent ev = ENC_CLICK;
                     if (xEncoderQueue != NULL) {
@@ -84,6 +94,7 @@ void EncoderLogic::loop() {
         }
     }
 
+    // Xử lý giữ rịt nút (Long Press > 1 giây) để thoát Menu
     if (currentButtonState == LOW && !isLongPressHandled) {
         if (millis() - buttonPressTime >= 1000) {
             isLongPressHandled = true;
