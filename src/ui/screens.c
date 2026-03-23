@@ -68,7 +68,7 @@ void create_screen_main() {
                     lv_obj_set_pos(obj, 172, 5);
                     lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
                     lv_obj_set_style_text_color(obj, lv_color_hex(0xffffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
-                    lv_label_set_text(obj, "Text");
+                    lv_label_set_text(obj, "6%");
                 }
             }
         }

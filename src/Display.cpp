@@ -82,14 +82,8 @@ void DisplayLogic::begin() {
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
-    // CÚ CHỐT 2: Đã BỎ xSemaphoreTake ở đây để tránh DEADLOCK!
-    // Lý do: Nơi gọi hàm này (appTask hoặc AppLogic::handleEvents) ĐÃ GIỮ Semaphore rồi.
-    
     Serial.printf("[DISPLAY] Loading background: %s\n", appState.bgFilePath);
     
-    // CÚ CHỐT 3: Bỏ sd_bg.begin() ở đây.
-    // StorageLogic đã mount thẻ rồi, gọi lại sẽ dễ bị lỗi trạng thái SPI và đụng độ băng thông.
-
     FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
     if (!file) {
         Serial.println("[DISPLAY] Custom BG not found, trying /bg.bin");
@@ -114,17 +108,11 @@ void DisplayLogic::loadBackgroundFromSD() {
 
     bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     
+    // [FIX LỖI 3]: Khôi phục lại hàm đọc 1 cục liền mạch thay vì cắt chunk cho Background
+    // Giúp con trỏ bộ nhớ của LVGL không bị lệch do ngắt nhịp SPI.
     if (bg_data_buffer) {
-        // CÚ CHỐT 4: Đọc file theo chunk 4KB để không khóa cứng SPI Bus quá lâu
-        size_t totalRead = 0;
-        while(totalRead < 115200) {
-            size_t toRead = (115200 - totalRead > 4096) ? 4096 : (115200 - totalRead);
-            int bytesRead = file.read(bg_data_buffer + totalRead, toRead);
-            if (bytesRead <= 0) break; // Thoát nếu lỗi đọc
-            totalRead += bytesRead;
-        }
-
-        if (totalRead >= 115200) {
+        size_t bytesRead = file.read(bg_data_buffer, 115200);
+        if (bytesRead == 115200) {
             custom_bg.header.always_zero = 0;
             custom_bg.header.w = 240;
             custom_bg.header.h = 240;
@@ -140,7 +128,7 @@ void DisplayLogic::loadBackgroundFromSD() {
             lv_obj_set_style_bg_opa(objects.stock, 0, 0);
             Serial.println("[DISPLAY] Background applied successfully.");
         } else {
-            Serial.printf("[DISPLAY] Read error: only got %d bytes\n", totalRead);
+            Serial.printf("[DISPLAY] Read error: only got %d bytes\n", bytesRead);
         }
     }
     file.close();
