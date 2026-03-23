@@ -60,11 +60,11 @@ static void webTask(void* pvParameters) {
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/upload.html", "r");
             if (!file) { server->send(500, "text/plain", "Missing upload.html"); return; }
+            // streamFile hoạt động bình thường với LittleFS
             server->streamFile(file, "text/html"); 
             file.close();
         });
 
-        // LOGIC LƯU FILE ĐÃ ĐƯỢC TỐI ƯU VÀ THÊM LOG
         server->on("/upload", HTTP_POST, [server]() {
             server->send(200, "text/plain", "OK");
             Serial.println("[WEB] Upload Finished. Rebooting...");
@@ -74,10 +74,8 @@ static void webTask(void* pvParameters) {
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
                 Serial.printf("[WEB] Starting upload: %s\n", upload.filename.c_str());
-                // CÚ CHỐT: Tăng thời gian chờ Semaphore lên 1000ms
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                    if (uploadFile) uploadFile.close(); // Đóng file nếu còn kẹt
-                    // Dùng O_TRUNC để xóa sạch nội dung cũ ngay khi mở
+                    if (uploadFile) uploadFile.close(); 
                     uploadFile = sd_bg.open("/bg.bin", O_WRITE | O_CREAT | O_TRUNC);
                     if (uploadFile) Serial.println("[WEB] File /bg.bin opened for overwriting.");
                     else Serial.println("[WEB] ERROR: Could not open file for writing!");
@@ -103,27 +101,34 @@ static void webTask(void* pvParameters) {
         });
 
         server->on("/download", HTTP_GET, [server]() {
-            FsFile file;
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                file = sd_bg.open("/bg.bin", O_READ);
-                xSemaphoreGive(xGuiSemaphore);
-            }
-            if (file) {
-                server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
-                server->setContentLength(file.size());
-                server->send(200, "application/octet-stream", "");
-                uint8_t buffer[1024]; 
-                int bytesRead;
-                while (1) {
-                    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                FsFile file = sd_bg.open("/bg.bin", O_READ);
+                if (file) {
+                    server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
+                    server->sendHeader("Connection", "close");
+                    
+                    // CÚ CHỐT: Gắn chặt Content-Length để dập tắt chế độ chunked rác của ESP32
+                    server->setContentLength(file.size());
+                    
+                    // Gửi đi header
+                    server->send(200, "application/octet-stream", ""); 
+
+                    // Tự tay bơm từng byte từ SdFat ra trình duyệt
+                    uint8_t buffer[1024];
+                    int bytesRead;
+                    while (1) {
                         bytesRead = file.read(buffer, sizeof(buffer));
-                        xSemaphoreGive(xGuiSemaphore);
-                    } else bytesRead = 0;
-                    if (bytesRead <= 0) break;
-                    server->client().write(buffer, bytesRead);
+                        if (bytesRead <= 0) break;
+                        server->client().write(buffer, bytesRead);
+                    }
+                    file.close();
+                } else {
+                    server->send(404, "text/plain", "File missing");
                 }
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) { file.close(); xSemaphoreGive(xGuiSemaphore); }
-            } else server->send(404, "text/plain", "File missing");
+                xSemaphoreGive(xGuiSemaphore);
+            } else {
+                server->send(500, "text/plain", "SD busy");
+            }
         });
     }
     
@@ -139,7 +144,6 @@ static void webTask(void* pvParameters) {
     vTaskDelete(NULL); 
 }
 
-// Các hàm runWiFiSetup và runBgUpload giữ nguyên...
 bool WebServerLogic::runWiFiSetup() {
     if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_STA);
