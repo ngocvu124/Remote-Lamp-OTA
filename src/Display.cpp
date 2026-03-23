@@ -109,14 +109,8 @@ void DisplayLogic::loadBackgroundFromSD() {
     bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM);
     
     if (bg_data_buffer) {
+        // Đọc xong là dùng luôn, không cần tráo byte nữa vì file đã là Little Endian
         file.read(bg_data_buffer, 115200);
-
-        // Đảo byte tại đây để ESP32 hiện đúng màu, trị dứt điểm màu xanh ngọc
-        uint16_t* pixel_ptr = (uint16_t*)bg_data_buffer;
-        for (int i = 0; i < 57600; i++) {
-            uint16_t color = pixel_ptr[i];
-            pixel_ptr[i] = (color >> 8) | (color << 8); 
-        }
 
         custom_bg.header.always_zero = 0;
         custom_bg.header.w = 240;
@@ -414,14 +408,8 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM);
     if (!preview_data_buffer) return false;
 
+    // Đọc xong là dùng luôn, không cần đảo byte
     file.read(preview_data_buffer, 115200);
-
-    // Đảo byte tại đây để xem trước cũng hiện đúng màu
-    uint16_t* pixel_ptr = (uint16_t*)preview_data_buffer;
-    for (int i = 0; i < 57600; i++) {
-        uint16_t color = pixel_ptr[i];
-        pixel_ptr[i] = (color >> 8) | (color << 8); 
-    }
 
     preview_img_dsc.header.always_zero = 0;
     preview_img_dsc.header.w = 240;

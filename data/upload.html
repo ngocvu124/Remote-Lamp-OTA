@@ -32,7 +32,7 @@
             <canvas id="canvas" width="240" height="240"></canvas>
         </div>
         <div class="canvas-box">
-            <span class="label-tag">2. BIN Preview</span>
+            <span class="label-tag">2. BIN Preview (Little Endian)</span>
             <canvas id="binPreview" width="240" height="240"></canvas>
         </div>
     </div>
@@ -63,13 +63,13 @@
                     for (let i = 0; i < imgData.length; i += 4) {
                         const r = imgData[i] >> 3, g = imgData[i+1] >> 2, b = imgData[i+2] >> 3;
                         const rgb565 = (r << 11) | (g << 5) | b;
-                        // Lưu chuẩn Big-Endian để PC đọc đúng màu
-                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF; // High byte
+                        // Lưu Little Endian: Byte thấp trước, Byte cao sau. Chuẩn bài cho ESP32.
                         rgb565Data[j++] = rgb565 & 0xFF;        // Low byte
+                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF; // High byte
                     }
                     renderPreview();
                     uploadBtn.disabled = dlLocalBtn.disabled = false;
-                    statusDiv.innerText = 'Đã xử lý ảnh thành công!';
+                    statusDiv.innerText = 'Đã xử lý xong định dạng Little Endian!';
                     statusDiv.style.color = '#00ff00';
                 };
                 img.src = event.target.result;
@@ -80,7 +80,8 @@
         function renderPreview() {
             const imgData = btx.createImageData(240, 240);
             for (let i = 0; i < 240 * 240; i++) {
-                const high = rgb565Data[i * 2], low = rgb565Data[i * 2 + 1];
+                // Trình duyệt web đọc ngược lại Little Endian để preview cho bác xem
+                const low = rgb565Data[i * 2], high = rgb565Data[i * 2 + 1];
                 const val = (high << 8) | low;
                 const r = (val >> 11) & 0x1F, g = (val >> 5) & 0x3F, b = val & 0x1F;
                 imgData.data[i*4] = (r << 3) | (r >> 2);
