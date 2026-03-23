@@ -134,7 +134,10 @@ void AppLogic::handleEvents() {
                     if (appState.menuIndex == storage.fileCount) enterMenu(MENU_MAIN);
                     else {
                         char* f = storage.fileNames[appState.menuIndex];
-                        if (strstr(f, ".bin")) { FsFile file = sd_bg.open(f, O_READ); if(file){ isViewingImage = display.showImagePreview(file); file.close(); }}
+                        if (strstr(f, ".bin")) { 
+                            FsFile file = sd_bg.open(f, O_READ); 
+                            if(file){ isViewingImage = display.showImagePreview(file); file.close(); }
+                        }
                         else { isViewingFile = true; display.showFileContent(f, storage.readFileToPSRAM(f)); }
                     }
                     break;
@@ -162,8 +165,15 @@ void AppLogic::enterMenu(int level) {
     if (level == MENU_MAIN) encoder.setBoundaries(0, 6, true);
     else if (level == MENU_CONTROL) encoder.setBoundaries(0, 4, true);
     else if (level == MENU_SELECT_BG) { storage.loadBgFiles(); encoder.setBoundaries(0, storage.bgFileCount, true); }
-    else if (level == MENU_STOCK) { if(!stockTaskHandle) xTaskCreatePinnedToCore(stockUpdateTask, "StockTask", 8192, NULL, 2, &stockTaskHandle, 1); encoder.setBoundaries(0, 19, true); }
-    else if (level == MENU_OTA) { ota.fetchVersions(); if(!otaTaskHandle) xTaskCreatePinnedToCore(otaUpdateTask, "OtaTask", 8192, NULL, 2, &otaTaskHandle, 1); encoder.setBoundaries(0, ota.versionCount, true); }
+    else if (level == MENU_STOCK) { 
+        if(!stockTaskHandle) xTaskCreatePinnedToCore(stockUpdateTask, "StockTask", 8192, NULL, 2, &stockTaskHandle, 1); 
+        encoder.setBoundaries(0, 19, true); 
+    }
+    else if (level == MENU_OTA) { 
+        ota.fetchVersions(); 
+        if(!otaTaskHandle) xTaskCreatePinnedToCore(otaUpdateTask, "OtaTask", 8192, NULL, 2, &otaTaskHandle, 1); 
+        encoder.setBoundaries(0, ota.versionCount, true); 
+    }
     else if (level == MENU_WEB_SERVER) { webServer.runBgUpload(); }
     encoder.setEncoderValue(0);
 }
