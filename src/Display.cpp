@@ -412,37 +412,37 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
     }
 
-    size_t fileSize = file.size();
-    if (fileSize != 115200) return false; 
-
     if (preview_data_buffer != NULL) {
         heap_caps_free(preview_data_buffer);
         preview_data_buffer = NULL;
     }
+
+    // Cấp phát PSRAM CAP 8BIT để truy cập mảng byte chuẩn xác
     preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!preview_data_buffer) return false;
 
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-        file.read(preview_data_buffer, 115200);
-
-        preview_img_dsc.header.always_zero = 0;
-        preview_img_dsc.header.w = 240;
-        preview_img_dsc.header.h = 240;
-        preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-        preview_img_dsc.data_size = 115200;
-        preview_img_dsc.data = preview_data_buffer;
-
-        if (!preview_img_obj) {
-            preview_img_obj = lv_img_create(scr_image_preview);
-            lv_obj_center(preview_img_obj);
-        }
-        lv_img_set_src(preview_img_obj, &preview_img_dsc);
-
-        lv_scr_load(scr_image_preview);
-        xSemaphoreGive(xGuiSemaphore);
-        return true;
+    // Đọc ảnh theo từng cụm 4KB để ổn định Bus SPI
+    size_t totalRead = 0;
+    while(totalRead < 115200) {
+        size_t toRead = (115200 - totalRead > 4096) ? 4096 : (115200 - totalRead);
+        totalRead += file.read(preview_data_buffer + totalRead, toRead);
     }
-    return false;
+
+    preview_img_dsc.header.always_zero = 0;
+    preview_img_dsc.header.w = 240;
+    preview_img_dsc.header.h = 240;
+    preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
+    preview_img_dsc.data_size = 115200;
+    preview_img_dsc.data = preview_data_buffer;
+
+    if (!preview_img_obj) {
+        preview_img_obj = lv_img_create(scr_image_preview);
+        lv_obj_center(preview_img_obj);
+    }
+    lv_img_set_src(preview_img_obj, &preview_img_dsc);
+    lv_scr_load(scr_image_preview);
+    
+    return true;
 }
 
 void DisplayLogic::closeImagePreview() {

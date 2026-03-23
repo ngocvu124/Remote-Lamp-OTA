@@ -7,15 +7,20 @@ extern SdFs sd_bg;
 
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
-    // Tăng tốc độ bus SPI lên 20MHz để nạp ảnh 115KB nhanh và ổn định
-    if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(20)))) {
+    
+    // Tắt toàn bộ Chip Select trước khi bắt đầu
+    pinMode(SD_CS_PIN, OUTPUT);
+    digitalWrite(SD_CS_PIN, HIGH);
+    pinMode(SCR_CS_PIN, OUTPUT);
+    digitalWrite(SCR_CS_PIN, HIGH);
+
+    // Sử dụng tốc độ thấp 16MHz để đảm bảo dữ liệu không bị nhiễu do dây dẫn
+    if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16)))) {
         isReady = true;
         Serial.println("[STORAGE] SD Mount OK!");
         
-        // Kiểm tra và tạo thư mục background nếu chưa có
         if (!sd_bg.exists("/background")) {
             sd_bg.mkdir("/background");
-            Serial.println("[STORAGE] Created /background directory");
         }
         
         loadFiles();
