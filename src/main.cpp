@@ -21,6 +21,12 @@ void guiTask(void *pvParameters) {
     display.begin();  
     isGuiReady = true; 
 
+    // CÚ CHỐT 1: Bắt GuiTask chờ Storage khởi động và nạp ảnh xong mới được vòng lặp LVGL
+    // Giúp loại bỏ hoàn toàn tranh chấp SPI Bus lúc Boot
+    while (!isStorageReady) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
     uint32_t lastTick = millis();
     while (1) {
         uint32_t currentTick = millis();
@@ -37,34 +43,33 @@ void guiTask(void *pvParameters) {
 }
 
 void inputTask(void *pvParameters) {
-    while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
+    while (!isStorageReady) vTaskDelay(pdMS_TO_TICKS(50));
     encoder.begin();  
     while (1) {
         encoder.loop(); 
-        vTaskDelay(pdMS_TO_TICKS(10)); // Tăng delay một chút để nhường CPU
+        vTaskDelay(pdMS_TO_TICKS(10)); 
     }
 }
 
 void appTask(void *pvParameters) {
-    // Chờ GUI và WebServer sẵn sàng
+    // Chờ TFT và SPI khởi tạo xong từ guiTask
     while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
-    vTaskDelay(pdMS_TO_TICKS(200)); 
+    vTaskDelay(pdMS_TO_TICKS(100)); // Delay thêm một chút cho bus SPI thật sự rảnh
 
-    webServer.begin(); 
-
-    // CÚ CHỐT: Khởi tạo Storage và nạp ảnh ngay khi khởi động
+    // Khởi tạo Storage an toàn tuyệt đối
     if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
         storage.begin(); 
         if (storage.isReady) {
             storage.loadConfig(appState);
             display.setContrast(appState.oledBrightness);
-            // Nạp background ngay tại đây khi bus SPI đang được khóa bởi Semaphore
+            // Nạp background ngay tại đây. Hàm này KHÔNG dùng xSemaphoreTake bên trong nữa.
             display.loadBackgroundFromSD(); 
         }
-        isStorageReady = true; 
+        isStorageReady = true; // Báo hiệu kích hoạt tất cả các task khác
         xSemaphoreGive(xGuiSemaphore);
     }
 
+    webServer.begin(); 
     app.begin();     
 
     while (1) {
@@ -105,7 +110,6 @@ void setup() {
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 
 
     if (xGuiSemaphore != NULL && xEncoderQueue != NULL && xEspNowQueue != NULL) {
-        // Đẩy Task nạp dữ liệu lên Core 1, GUI lên Core 0
         xTaskCreatePinnedToCore(guiTask, "GuiTask", STACK_GUI, NULL, PRIO_GUI, NULL, 0);
         xTaskCreatePinnedToCore(inputTask, "InputTask", 4096, NULL, PRIO_INPUT, NULL, 1);
         xTaskCreatePinnedToCore(appTask, "AppTask", STACK_SYSTEM, NULL, PRIO_SYSTEM, NULL, 1);

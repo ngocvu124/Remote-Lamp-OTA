@@ -82,64 +82,68 @@ void DisplayLogic::begin() {
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(2000))) {
-        Serial.printf("[DISPLAY] Loading background: %s\n", appState.bgFilePath);
-        
-        if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(20)))) {
-            xSemaphoreGive(xGuiSemaphore);
-            return; 
-        }
-        
-        FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
-        if (!file) {
-            Serial.println("[DISPLAY] Custom BG not found, trying /bg.bin");
-            file = sd_bg.open("/bg.bin", O_READ);
-        }
+    // CÚ CHỐT 2: Đã BỎ xSemaphoreTake ở đây để tránh DEADLOCK!
+    // Lý do: Nơi gọi hàm này (appTask hoặc AppLogic::handleEvents) ĐÃ GIỮ Semaphore rồi.
+    
+    Serial.printf("[DISPLAY] Loading background: %s\n", appState.bgFilePath);
+    
+    // CÚ CHỐT 3: Bỏ sd_bg.begin() ở đây.
+    // StorageLogic đã mount thẻ rồi, gọi lại sẽ dễ bị lỗi trạng thái SPI và đụng độ băng thông.
 
-        if (!file) {
-            Serial.println("[DISPLAY] No background file found on SD!");
-            xSemaphoreGive(xGuiSemaphore);
-            return;
-        }
-
-        if (file.size() < 115200) {
-            Serial.printf("[DISPLAY] Error: File too small (%d bytes)\n", (int)file.size());
-            file.close();
-            xSemaphoreGive(xGuiSemaphore);
-            return;
-        }
-
-        if (bg_data_buffer != NULL) {
-            heap_caps_free(bg_data_buffer);
-            bg_data_buffer = NULL;
-        }
-
-        bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        
-        if (bg_data_buffer) {
-            size_t bytesRead = file.read(bg_data_buffer, 115200);
-            if (bytesRead == 115200) {
-                custom_bg.header.always_zero = 0;
-                custom_bg.header.w = 240;
-                custom_bg.header.h = 240;
-                custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
-                custom_bg.data_size = 115200;
-                custom_bg.data = bg_data_buffer;
-                
-                lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
-                lv_obj_set_style_bg_opa(objects.main, 0, 0);
-                lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
-                lv_obj_set_style_bg_opa(objects.menu, 0, 0);
-                lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
-                lv_obj_set_style_bg_opa(objects.stock, 0, 0);
-                Serial.println("[DISPLAY] Background applied successfully.");
-            } else {
-                Serial.printf("[DISPLAY] Read error: only got %d bytes\n", bytesRead);
-            }
-        }
-        file.close();
-        xSemaphoreGive(xGuiSemaphore);
+    FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
+    if (!file) {
+        Serial.println("[DISPLAY] Custom BG not found, trying /bg.bin");
+        file = sd_bg.open("/bg.bin", O_READ);
     }
+
+    if (!file) {
+        Serial.println("[DISPLAY] No background file found on SD!");
+        return;
+    }
+
+    if (file.size() < 115200) {
+        Serial.printf("[DISPLAY] Error: File too small (%d bytes)\n", (int)file.size());
+        file.close();
+        return;
+    }
+
+    if (bg_data_buffer != NULL) {
+        heap_caps_free(bg_data_buffer);
+        bg_data_buffer = NULL;
+    }
+
+    bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    
+    if (bg_data_buffer) {
+        // CÚ CHỐT 4: Đọc file theo chunk 4KB để không khóa cứng SPI Bus quá lâu
+        size_t totalRead = 0;
+        while(totalRead < 115200) {
+            size_t toRead = (115200 - totalRead > 4096) ? 4096 : (115200 - totalRead);
+            int bytesRead = file.read(bg_data_buffer + totalRead, toRead);
+            if (bytesRead <= 0) break; // Thoát nếu lỗi đọc
+            totalRead += bytesRead;
+        }
+
+        if (totalRead >= 115200) {
+            custom_bg.header.always_zero = 0;
+            custom_bg.header.w = 240;
+            custom_bg.header.h = 240;
+            custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
+            custom_bg.data_size = 115200;
+            custom_bg.data = bg_data_buffer;
+            
+            lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
+            lv_obj_set_style_bg_opa(objects.main, 0, 0);
+            lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
+            lv_obj_set_style_bg_opa(objects.menu, 0, 0);
+            lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
+            lv_obj_set_style_bg_opa(objects.stock, 0, 0);
+            Serial.println("[DISPLAY] Background applied successfully.");
+        } else {
+            Serial.printf("[DISPLAY] Read error: only got %d bytes\n", totalRead);
+        }
+    }
+    file.close();
 }
 
 void DisplayLogic::loop() {
@@ -417,11 +421,9 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         preview_data_buffer = NULL;
     }
 
-    // Cấp phát PSRAM CAP 8BIT để truy cập mảng byte chuẩn xác
     preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!preview_data_buffer) return false;
 
-    // Đọc ảnh theo từng cụm 4KB để ổn định Bus SPI
     size_t totalRead = 0;
     while(totalRead < 115200) {
         size_t toRead = (115200 - totalRead > 4096) ? 4096 : (115200 - totalRead);
