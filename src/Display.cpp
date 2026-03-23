@@ -20,8 +20,8 @@ static uint8_t* preview_data_buffer = NULL;
 static lv_img_dsc_t preview_img_dsc;        
 static lv_obj_t* preview_img_obj = NULL;    
 
-// [KHÔI PHỤC]: Khai báo mảng chứa chính xác nút bấm, tránh LVGL nhầm sang Scrollbar
-static lv_obj_t* menuButtons[30]; 
+// TÁCH RỜI MẢNG NÚT BẤM KHỎI CLASS ĐỂ CHỐNG TRÀN BỘ NHỚ
+static lv_obj_t* g_menuBtns[30]; 
 
 #define BACKLIGHT_CHANNEL 0 
 
@@ -91,8 +91,6 @@ void DisplayLogic::loadBackgroundFromSD() {
 
     if (file.size() < 115200) { file.close(); return; }
 
-    // [FIX LỖI BG ĐEN]: Ép giải phóng bộ nhớ cũ và cấp phát lại để đổi Memory Pointer
-    // Điều này lừa cơ chế Cache của LVGL, bắt nó vẽ lại thay vì tối ưu hóa bỏ qua.
     if (bg_data_buffer != NULL) { 
         heap_caps_free(bg_data_buffer); 
         bg_data_buffer = NULL; 
@@ -125,7 +123,6 @@ void DisplayLogic::loadBackgroundFromSD() {
             lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
             lv_obj_set_style_bg_opa(objects.stock, 0, 0);
             
-            // ÉP REDRAW MÀN HÌNH MẠNH TAY
             lv_obj_invalidate(objects.main);
             lv_obj_invalidate(objects.menu);
             lv_obj_invalidate(objects.stock);
@@ -140,8 +137,7 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
     lv_obj_clean(objects.cont_menu_text); 
     currentMenuCount = count;
     
-    // Đảm bảo xóa mảng cũ để không còn rác bộ nhớ
-    for(int i = 0; i < 30; i++) menuButtons[i] = NULL;
+    for(int i = 0; i < 30; i++) g_menuBtns[i] = NULL;
     
     for(int i = 0; i < count; i++) {
         lv_obj_t * btn = lv_btn_create(objects.cont_menu_text);
@@ -158,8 +154,7 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
         lv_label_set_text(label, items[i]);
         lv_obj_center(label); 
         
-        // Gán cứng vào mảng
-        menuButtons[i] = btn;
+        g_menuBtns[i] = btn;
     }
 }
 
@@ -233,15 +228,14 @@ void DisplayLogic::updateUI(RemoteState &state) {
             lastMenuType = state.currentMenu;
         }
 
-        // [SỬA LỖI FOCUS]: Gọi trực tiếp con trỏ trên mảng an toàn
         for (int i = 0; i < currentMenuCount; i++) {
-            if (menuButtons[i] == NULL) continue;
+            if (g_menuBtns[i] == NULL) continue;
             
             if (i == state.menuIndex) {
-                lv_obj_add_state(menuButtons[i], LV_STATE_CHECKED);
-                lv_obj_scroll_to_view(menuButtons[i], LV_ANIM_ON);
+                lv_obj_add_state(g_menuBtns[i], LV_STATE_CHECKED);
+                lv_obj_scroll_to_view(g_menuBtns[i], LV_ANIM_ON);
             } else {
-                lv_obj_clear_state(menuButtons[i], LV_STATE_CHECKED);
+                lv_obj_clear_state(g_menuBtns[i], LV_STATE_CHECKED);
             }
         }
     }
