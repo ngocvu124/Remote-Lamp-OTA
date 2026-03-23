@@ -65,7 +65,7 @@ static void webTask(void* pvParameters) {
             file.close();
         });
 
-        // Tự động lưu file vào /background/
+        // CÚ CHỐT: Tự động lưu mọi file background vào /background/
         server->on("/upload", HTTP_POST, [server]() {
             server->send(200, "text/plain", "OK");
             Serial.println("[WEB] Upload Finished.");
@@ -258,51 +258,19 @@ static void webTask(void* pvParameters) {
 
 bool WebServerLogic::runWiFiSetup() {
     if (WiFi.status() == WL_CONNECTED) return true;
-    
-    // Popup thông báo đang kết nối
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        display.showProgressPopup("WIFI", "Connecting to WiFi...", -1); 
-        xSemaphoreGive(xGuiSemaphore);
-    }
-
     WiFi.mode(WIFI_STA);
     WiFi.begin(); 
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) {
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                display.closeProgressPopup();
-                xSemaphoreGive(xGuiSemaphore);
-            }
-            return false;
-        }
+        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) return false;
     }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-            display.closeProgressPopup();
-            xSemaphoreGive(xGuiSemaphore);
-        }
-        return true;
-    }
-
-    // Nếu thất bại -> Hiện Popup hướng dẫn cấu hình
+    if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP("REMOTE_LAMP", ""); 
-
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-        char msg[160];
-        sprintf(msg, "WiFi Connect Failed!\n\n1. Connect Phone to:\nSSID: REMOTE_LAMP\n2. Open Browser: 192.168.4.1\nto setup WiFi.");
-        display.showProgressPopup("WIFI SETUP", msg, -1);
-        xSemaphoreGive(xGuiSemaphore);
-    }
-
     isRunning = true;
     xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
-    while (isRunning && WiFi.status() != WL_CONNECTED) vTaskDelay(pdMS_TO_TICKS(100));
-    
+    while (isRunning) vTaskDelay(pdMS_TO_TICKS(100));
     return WiFi.status() == WL_CONNECTED;
 }
 
@@ -310,8 +278,7 @@ void WebServerLogic::runBgUpload() {
     if (!runWiFiSetup()) return;
     String ip = WiFi.localIP().toString();
     
-    // Thông tin truy cập Web Server khi đã có IP
-    char msg_buf[128];
+    char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
     sprintf(msg_buf, "1. Up BG: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str());
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
         display.showProgressPopup("WEB SERVER", msg_buf, 0);
