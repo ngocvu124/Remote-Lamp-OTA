@@ -22,7 +22,6 @@ static lv_obj_t* preview_img_obj = NULL;
 
 #define BACKLIGHT_CHANNEL 0 
 
-// ĐÃ THÊM MỤC 6. WEB SERVER RA MAIN MENU
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
@@ -86,7 +85,6 @@ void DisplayLogic::loadBackgroundFromSD() {
     Serial.println("[DISPLAY] Loading background from SD...");
     if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) return; 
 
-    // ĐỌC ĐƯỜNG DẪN ẢNH TỪ FILE TEXT ĐỂ TỰ ĐỘNG CHUYỂN
     String bgFilename = "/bg.bin";
     if (sd_bg.exists("/active_bg.txt")) {
         FsFile f = sd_bg.open("/active_bg.txt", O_READ);
@@ -104,7 +102,6 @@ void DisplayLogic::loadBackgroundFromSD() {
 
     FsFile file = sd_bg.open(bgFilename.c_str(), O_READ);
     if (!file) {
-        // Fallback về bg.bin nếu lỡ tay xoá file hình cũ
         file = sd_bg.open("/bg.bin", O_READ);
         if (!file) return;
     }
@@ -223,7 +220,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 int count = 0;
                 
                 if (state.currentMenu == MENU_USB_MODE || state.currentMenu == MENU_CHANGE_BG_LOCAL) {
-                    storage.loadFiles();
+                    // CÚ CHỐT: Không gọi storage.loadFiles() nữa để tránh lỗi đọc thẻ kép với App.cpp
                     for (int i = 0; i < storage.fileCount; i++) { items[i] = storage.fileNames[i]; }
                     count = storage.fileCount;
                 } else {

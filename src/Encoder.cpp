@@ -20,12 +20,15 @@ void EncoderLogic::begin() {
     lastInteractionTime = millis();
 }
 
-// Hàm này sẽ được AppTask gọi để bật/tắt tùy theo Menu
+// CÚ CHỐT: Không dùng hàm disableAcceleration() bị lỗi của thư viện nữa!
 void EncoderLogic::setAcceleration(bool enabled) {
     if (enabled) {
+        // Bật gia tốc: Vặn nhanh thì nhảy số nhanh (dùng chỉnh độ sáng, thời gian)
         rotaryEncoder.setAcceleration(250);
     } else {
-        rotaryEncoder.disableAcceleration();
+        // Tắt gia tốc: Ép thời gian ngưỡng xuống 5ms (người vặn không thể đạt tới tốc độ này)
+        // Núm vặn sẽ tự động nhảy 1 khấc = 1 mục mà không bị dính lỗi đóng băng!
+        rotaryEncoder.setAcceleration(5);
     }
 }
 

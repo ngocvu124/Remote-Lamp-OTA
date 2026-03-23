@@ -32,16 +32,21 @@ void StorageLogic::loadFiles() {
     Serial.println("[STORAGE] Scanning root directory...");
     FsFile file;
     while (file.openNext(&dir, O_READ)) {
+        if (file.isDir()) {
+            file.close();
+            continue;
+        }
+
         char name[32];
         file.getName(name, 32);
-        
         String fName = String(name);
         
-        // CÚ CHỐT: Lọc bỏ toàn bộ file rác, file cấu hình và file text hệ thống
-        if (fName == "System Volume Information" || 
+        // CÚ CHỐT: Lọc triệt để các file ẩn (bắt đầu bằng dấu chấm của macOS) và file cấu hình
+        if (fName.startsWith(".") || 
             fName == "active_bg.txt" || 
             fName == "config.json" || 
-            fName == "config.txt") {
+            fName == "config.txt" || 
+            fName == "System Volume Information") {
             file.close();
             continue;
         }
