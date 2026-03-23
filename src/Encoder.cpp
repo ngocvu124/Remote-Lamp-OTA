@@ -1,5 +1,8 @@
 #include "Encoder.h"
 
+// --- FIX LỖI ENCODER: Khai báo mượn biến Queue từ main ---
+extern QueueHandle_t xEncoderQueue;
+
 EncoderLogic encoder;
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_A_PIN, ROTARY_B_PIN, ROTARY_BTN_PIN, -1, ROTARY_STEPS);
 

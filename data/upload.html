@@ -7,8 +7,6 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
-        
-        /* Sidebar */
         .sidebar { width: 260px; background-color: #1e293b; display: flex; flex-direction: column; border-right: 1px solid #334155; }
         .sidebar-header { padding: 25px 20px; font-size: 1.5rem; font-weight: 800; color: #f97316; border-bottom: 1px solid #334155; text-align: center; letter-spacing: 1px; }
         .nav-menu { flex: 1; padding: 20px 15px; display: flex; flex-direction: column; gap: 12px; }
@@ -17,24 +15,19 @@
         .nav-link.active { background-color: #f97316; color: #fff; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); transform: none; }
         .github-link { margin-top: auto; background-color: #0f172a; border: 1px solid #334155; color: #38bdf8; }
         .github-link:hover { background-color: #38bdf8; color: #0f172a; }
-
-        /* Main Content */
         .main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
         .header { background-color: #1e293b; padding: 20px 30px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
         .header h2 { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
         #status { font-weight: 600; padding: 6px 15px; border-radius: 20px; background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 14px; }
-        
         .content { padding: 30px; max-width: 900px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; align-items: center; }
         .upload-card { background: #1e293b; border: 1px dashed #475569; padding: 30px; border-radius: 16px; width: 100%; text-align: center; margin-bottom: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
         .upload-label { display: inline-block; background: #f97316; color: white; padding: 12px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
         .upload-label:hover { background: #ea580c; transform: translateY(-2px); }
         input[type="file"] { display: none; }
-
         .canvas-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; width: 100%; }
         .canvas-box { display: flex; flex-direction: column; align-items: center; }
         .label-tag { font-size: 13px; margin-bottom: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
         canvas { border: 4px solid #334155; border-radius: 12px; max-width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-
         .button-group { display: flex; justify-content: center; gap: 15px; margin-top: 40px; width: 100%; flex-wrap: wrap; }
         .btn { border: none; padding: 14px 24px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 8px; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
@@ -42,29 +35,16 @@
         .btn-upload:hover:not(:disabled) { background: #ea580c; transform: translateY(-2px); }
         .btn-download { background: #1e293b; color: #10b981; border: 2px solid #10b981; }
         .btn-download:hover:not(:disabled) { background: #10b981; color: #1e293b; }
-        .btn-sd { background: #1e293b; color: #38bdf8; border: 2px solid #38bdf8; }
-        .btn-sd:hover { background: #38bdf8; color: #1e293b; }
-
-        /* Footer */
         .footer { padding: 20px; text-align: center; color: #64748b; font-size: 0.85rem; border-top: 1px solid #334155; margin-top: auto; }
-
-        @media (max-width: 768px) {
-            body { flex-direction: column; }
-            .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #334155; }
-            .nav-menu { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 10px; gap: 8px;}
-            .nav-link { padding: 10px 15px; font-size: 13px; }
-            .content { padding: 15px; }
-            .canvas-container { gap: 20px; }
-        }
+        @media (max-width: 768px) { body { flex-direction: column; } .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #334155; } .nav-menu { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 10px; gap: 8px;} .nav-link { padding: 10px 15px; font-size: 13px; } .content { padding: 15px; } .canvas-container { gap: 20px; } }
     </style>
 </head>
 <body>
     <aside class="sidebar">
         <div class="sidebar-header">💡 Remote Lamp</div>
         <nav class="nav-menu">
-            <a href="/" class="nav-link active">🖼️ Đổi Hình Nền</a>
+            <a href="/" class="nav-link active">🖼️ Tạo Hình Nền</a>
             <a href="/files" class="nav-link">🗂️ Quản Lý File</a>
-            <a href="#" class="nav-link" onclick="alert('Chức năng này chỉ khả dụng khi thiết bị đang ở chế độ Menu Cài Đặt WiFi.')">⚙️ Cài Đặt WiFi</a>
             <a href="https://github.com/ngocvu124/Remote-Lamp-OTA" target="_blank" class="nav-link github-link">💻 GitHub Project</a>
         </nav>
     </aside>
@@ -79,9 +59,17 @@
             <div class="upload-card">
                 <label class="upload-label">
                     <input type="file" id="fileInput" accept="image/jpeg, image/png">
-                    📸 CHỌN ẢNH TỪ MÁY TÍNH / ĐIỆN THOẠI
+                    📸 CHỌN ẢNH TỪ MÁY
                 </label>
-                <p style="margin-top: 15px; color: #64748b; font-size: 13px;">Hệ thống sẽ tự động crop trung tâm và xử lý về kích thước 240x240 chuẩn ESP32.</p>
+                
+                <div style="margin-top: 25px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                    <label style="color: #cbd5e1; font-weight: bold; font-size: 14px;">Lưu file trên thẻ nhớ với tên:</label>
+                    <div style="display: flex; justify-content: center; align-items: center; margin-top: 10px;">
+                        <input type="text" id="fileNameInput" value="bg1" placeholder="vd: bg1" style="width: 150px; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; text-align: center; font-size: 15px; outline: none; font-weight: bold;">
+                        <span style="color: #94a3b8; margin-left: 10px; font-weight: bold;">.bin</span>
+                    </div>
+                    <p style="font-size: 12px; color: #64748b; margin-top: 10px;">(Tên này sẽ hiện trong Menu Change BG trên màn hình ESP32)</p>
+                </div>
             </div>
 
             <div class="canvas-container">
@@ -90,21 +78,18 @@
                     <canvas id="canvas" width="240" height="240"></canvas>
                 </div>
                 <div class="canvas-box">
-                    <span class="label-tag">2. Bản Xem Trước (Rendered)</span>
+                    <span class="label-tag">2. Bản Xem Trước</span>
                     <canvas id="binPreview" width="240" height="240"></canvas>
                 </div>
             </div>
 
             <div class="button-group">
-                <button id="uploadBtn" class="btn btn-upload" disabled>🚀 TẢI LÊN MÀN HÌNH</button>
-                <button id="dlLocalBtn" class="btn btn-download" disabled>📥 LƯU BIN VỀ MÁY</button>
-                <button onclick="window.location.href='/download'" class="btn btn-sd">💾 TẢI ẢNH TỪ THẺ SD</button>
+                <button id="uploadBtn" class="btn btn-upload" disabled>🚀 TẢI LÊN ESP32</button>
+                <button id="dlLocalBtn" class="btn btn-download" disabled>📥 LƯU BIN VỀ PC</button>
             </div>
         </div>
 
-        <footer class="footer">
-            &copy; 2026 Remote Lamp Project by Vũ. All rights reserved.
-        </footer>
+        <footer class="footer">&copy; 2026 Remote Lamp Project by Vũ. All rights reserved.</footer>
     </main>
 
     <script>
@@ -114,10 +99,15 @@
         let rgb565Data = null;
 
         function setStatus(msg, color, bg) {
-            statusDiv.innerText = msg;
-            statusDiv.style.color = color;
-            statusDiv.style.background = bg;
+            statusDiv.innerText = msg; statusDiv.style.color = color; statusDiv.style.background = bg;
         }
+
+        let getFileName = () => {
+            let fName = document.getElementById('fileNameInput').value.trim();
+            if(!fName) fName = 'bg';
+            fName = fName.replace(/\.bin$/i, ''); // Xóa chữ .bin nếu user lỡ nhập
+            return fName + '.bin';
+        };
 
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0]; if (!file) return;
@@ -134,7 +124,6 @@
                     for (let i = 0; i < imgData.length; i += 4) {
                         const r = imgData[i] >> 3, g = imgData[i+1] >> 2, b = imgData[i+2] >> 3;
                         const rgb565 = (r << 11) | (g << 5) | b;
-                        // MÃ HÓA LITTLE ENDIAN
                         rgb565Data[j++] = rgb565 & 0xFF;        
                         rgb565Data[j++] = (rgb565 >> 8) & 0xFF; 
                     }
@@ -163,14 +152,15 @@
 
         dlLocalBtn.onclick = () => {
             const blob = new Blob([rgb565Data], { type: 'application/octet-stream' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bg.bin'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = getFileName(); a.click();
         };
 
         uploadBtn.onclick = () => {
             uploadBtn.disabled = true; 
-            setStatus('Đang gửi dữ liệu...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
+            let finalName = getFileName();
+            setStatus('Đang tải ' + finalName + ' lên...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
             const formData = new FormData(); 
-            formData.append('bg', new Blob([rgb565Data], { type: 'application/octet-stream' }), 'bg.bin');
+            formData.append('bg', new Blob([rgb565Data], { type: 'application/octet-stream' }), finalName);
             fetch('/upload', { method: 'POST', body: formData }).then(res => res.ok ? location.reload() : alert('Lỗi tải lên!'));
         };
     </script>

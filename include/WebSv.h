@@ -12,12 +12,9 @@ enum WebServerMode {
 class WebServerLogic {
 public:
     void begin();
-    
-    // Hàm này chạy chặn (blocking) các task Network cho đến khi cấu hình WiFi xong
     bool runWiFiSetup(); 
-    
-    // Hàm này chỉ kích hoạt Task Upload và trả về ngay để AppTask còn xử lý Menu
     void runBgUpload();  
+    void runWebServerOnly(); // HÀM MỚI KẾT NỐI WIFI NHÀ
     
     volatile bool isRunning;
 };
