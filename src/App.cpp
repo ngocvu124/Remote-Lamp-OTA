@@ -31,10 +31,8 @@ void stockUpdateTask(void *pvParameters) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 continue;
             }
-            
             char ticker[15];
             stock.getTickerName(appState.stockIndex, ticker); 
-            
             if (ticker[0] != '-') {
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                     stock.fetchAndUpdateUI(appState.stockIndex); 
@@ -60,29 +58,25 @@ void otaUpdateTask(void *pvParameters) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 continue;
             }
-            
             if (selectedOtaIndex >= 0) {
                 int idx = selectedOtaIndex;
                 selectedOtaIndex = -1;
                 ota.begin(ota.versions[idx].url);
             }
             else if (!listFetched) {
-                char* msg_buf = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
+                char* msg_buf = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                 if (!msg_buf) msg_buf = (char*)malloc(128);
                 strcpy(msg_buf, "Fetching version list...\nPlease wait!");
-                
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                     display.showProgressPopup("CHECKING", msg_buf, 0);
                     xSemaphoreGive(xGuiSemaphore);
                 } else heap_caps_free(msg_buf);
-
                 bool ok = ota.fetchVersions();
                 listFetched = true;
-
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                     display.closeProgressPopup();
                     if (!ok) {
-                        display.showFileContent("OTA ERROR", "Failed to fetch versions.json from GitHub!");
+                        display.showFileContent("OTA ERROR", "Failed to fetch versions.json!");
                         isViewingFile = true;
                     } else {
                         encoder.setBoundaries(0, ota.versionCount, true);
@@ -146,12 +140,9 @@ void AppLogic::handleEvents() {
                     xSemaphoreGive(xGuiSemaphore);
                 }
             }
-            else if (isViewingImage) {
-                ui_needs_update = false; 
-            }
+            else if (isViewingImage) { ui_needs_update = false; }
             else if (appState.currentMenu == MENU_NONE || appState.currentMenu == MENU_SET_SLEEP || appState.currentMenu == MENU_SET_BACKLIGHT) {
                 int step = (event == ENC_UP) ? 5 : -5; 
-                
                 if (appState.currentMenu == MENU_SET_SLEEP) {
                     appState.sleepTimeout = constrain(appState.sleepTimeout + step, 30, 300);
                     encoder.setEncoderValue(appState.sleepTimeout); 
@@ -170,8 +161,7 @@ void AppLogic::handleEvents() {
                         encoder.setEncoderValue(appState.brightness); 
                     }
                     espNow.send(0, appState.brightness, appState.temperature, ' ');
-                    // LƯU CẤU HÌNH: Tự động lưu khi xoay núm ở màn hình chính
-                    storage.saveConfig(appState); 
+                    storage.saveConfig(appState);
                 }
             }
             else {
@@ -181,10 +171,12 @@ void AppLogic::handleEvents() {
         }
 
         if (event == ENC_CLICK) {
-            if (isViewingFile && appState.currentMenu == MENU_USB_MODE) {
+            if ((isViewingFile || isViewingImage) && appState.currentMenu != MENU_SELECT_BG) {
                 isViewingFile = false;
+                isViewingImage = false;
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); 
+                    display.closeImagePreview();
                     xSemaphoreGive(xGuiSemaphore);
                 }
             } else {
@@ -202,93 +194,41 @@ void AppLogic::handleEvents() {
                         if (appState.menuIndex == 0) enterMenu(MENU_SET_SLEEP);
                         else if (appState.menuIndex == 1) enterMenu(MENU_SET_BACKLIGHT);
                         else if (appState.menuIndex == 2) {
-                            WiFi.mode(WIFI_STA);
-                            WiFi.disconnect(false, true); 
+                            WiFi.mode(WIFI_STA); WiFi.disconnect(false, true); 
                             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showFileContent("WIFI CLEARED", "Remote WiFi has been deleted!\n\nRebooting in 3 seconds...");
-                                isViewingFile = true;
+                                display.showFileContent("WIFI CLEARED", "WiFi deleted! Rebooting...");
                                 xSemaphoreGive(xGuiSemaphore);
                             }
-                            vTaskDelay(pdMS_TO_TICKS(3000));
-                            ESP.restart(); 
+                            vTaskDelay(pdMS_TO_TICKS(2000)); ESP.restart(); 
                         }
                         else if (appState.menuIndex == 3) enterMenu(MENU_SELECT_BG); 
                         else enterMenu(MENU_MAIN);
                         break;
-                    case MENU_LAMP:
-                        if (appState.menuIndex == 4) { 
-                            enterMenu(MENU_MAIN); 
-                        } else {
-                            char cmd = ' ';
-                            if (appState.menuIndex == 0) cmd = 'R';      
-                            else if (appState.menuIndex == 1) cmd = 'U'; 
-                            else if (appState.menuIndex == 2) cmd = 'W'; 
-                            else if (appState.menuIndex == 3) cmd = 'E'; 
-                            
-                            espNow.send(0, appState.brightness, appState.temperature, cmd);
-                            
-                            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showFileContent("CMD SENT", "Command sent via ESP-NOW!");
-                                isViewingFile = true;
-                                xSemaphoreGive(xGuiSemaphore);
-                            }
-                        }
-                        break;
                     case MENU_SET_SLEEP:         
                     case MENU_SET_BACKLIGHT:
-                        // LƯU CẤU HÌNH: Lưu khi thoát chế độ cài đặt Sleep/Backlight
-                        storage.saveConfig(appState); 
-                        enterMenu(MENU_CONTROL); 
-                        break;
-                    case MENU_STOCK:
-                        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                            stock.fetchAndUpdateUI(appState.stockIndex);
-                            xSemaphoreGive(xGuiSemaphore);
-                        }
-                        break;
-                    case MENU_USB_MODE:
-                        if (appState.menuIndex == storage.fileCount) {
-                            enterMenu(MENU_MAIN); 
-                        } else {
-                            char* fileName = storage.fileNames[appState.menuIndex];
-                            if (strstr(fileName, ".bin")) {
-                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    FsFile file = sd_bg.open(fileName, O_READ);
-                                    if(file) {
-                                        if (display.showImagePreview(file)) isViewingImage = true;
-                                        file.close();
-                                    }
-                                    xSemaphoreGive(xGuiSemaphore);
-                                }
-                            } else {
-                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    isViewingFile = true;
-                                    char* content = storage.readFileToPSRAM(fileName);
-                                    display.showFileContent(fileName, content);
-                                    xSemaphoreGive(xGuiSemaphore);
-                                }
-                            }
-                        }
-                        break;
+                        storage.saveConfig(appState); enterMenu(MENU_CONTROL); break;
                     case MENU_SELECT_BG:
                         if (appState.menuIndex == storage.bgFileCount) {
-                            enterMenu(MENU_CONTROL); 
-                        } else {
-                            char* fileName = storage.bgFileNames[appState.menuIndex];
-                            char fullPath[64];
-                            sprintf(fullPath, "/background/%s", fileName);
-
                             if (isViewingImage) {
-                                strcpy(appState.bgFilePath, fullPath);
-                                storage.saveConfig(appState); // LƯU CẤU HÌNH: Lưu đường dẫn ảnh nền mới
+                                isViewingImage = false;
+                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                                    display.closeImagePreview(); xSemaphoreGive(xGuiSemaphore);
+                                }
+                            }
+                            enterMenu(MENU_CONTROL);
+                        } else {
+                            char fullPath[64];
+                            snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
+                            if (isViewingImage && strcmp(appState.bgFilePath, fullPath) == 0) {
+                                storage.saveConfig(appState);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     display.closeImagePreview();
                                     display.loadBackgroundFromSD();
                                     xSemaphoreGive(xGuiSemaphore);
                                 }
-                                isViewingImage = false;
-                                exitMenu(); 
+                                isViewingImage = false; exitMenu(); 
                             } else {
+                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     FsFile file = sd_bg.open(fullPath, O_READ);
                                     if (file) {
@@ -300,22 +240,30 @@ void AppLogic::handleEvents() {
                             }
                         }
                         break;
-                    case MENU_OTA:
-                        if (appState.menuIndex == ota.versionCount) {
-                            enterMenu(MENU_MAIN); 
-                        } else {
-                            selectedOtaIndex = appState.menuIndex;
+                    case MENU_USB_MODE:
+                        if (appState.menuIndex == storage.fileCount) enterMenu(MENU_MAIN); 
+                        else {
+                            char* fName = storage.fileNames[appState.menuIndex];
+                            if (strstr(fName, ".bin")) {
+                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                                    FsFile file = sd_bg.open(fName, O_READ);
+                                    if(file) { if (display.showImagePreview(file)) isViewingImage = true; file.close(); }
+                                    xSemaphoreGive(xGuiSemaphore);
+                                }
+                            } else {
+                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                                    isViewingFile = true;
+                                    display.showFileContent(fName, storage.readFileToPSRAM(fName));
+                                    xSemaphoreGive(xGuiSemaphore);
+                                }
+                            }
                         }
-                        break;
-                    case MENU_WEB_SERVER:
-                        exitMenu(); 
                         break;
                     case MENU_NONE:
                         appState.isTempMode = !appState.isTempMode;
                         encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
-                        // LƯU CẤU HÌNH: Lưu khi chuyển đổi giữa chế độ Temp/Brightness
-                        storage.saveConfig(appState); 
-                        break;
+                        storage.saveConfig(appState); break;
+                    default: break;
                 }
             }
         }
@@ -338,37 +286,20 @@ void AppLogic::enterMenu(int level) {
     if (level == MENU_STOCK || level == MENU_OTA || level == MENU_WEB_SERVER) {
         originalSleepTimeout = appState.sleepTimeout;
         appState.sleepTimeout = 999999; 
-        
         if (level == MENU_STOCK) {
             encoder.setBoundaries(0, 19, true); 
-            if (stockTaskHandle == NULL) {
-                xTaskCreatePinnedToCore(stockUpdateTask, "StockTask", STACK_NETWORK, NULL, PRIO_NETWORK, &stockTaskHandle, 1);
-            }
+            if (!stockTaskHandle) xTaskCreatePinnedToCore(stockUpdateTask, "StockTask", STACK_NETWORK, NULL, PRIO_NETWORK, &stockTaskHandle, 1);
         } else if (level == MENU_OTA) {
-            isViewingFile = false; 
-            selectedOtaIndex = -1;
-            
-            if (otaTaskHandle == NULL) {
-                xTaskCreatePinnedToCore(otaUpdateTask, "OtaTask", STACK_NETWORK, NULL, PRIO_NETWORK, &otaTaskHandle, 1);
-            }
-        } else if (level == MENU_WEB_SERVER) {
-            isViewingFile = false;
-            webServer.runBgUpload(); 
-        }
+            isViewingFile = false; selectedOtaIndex = -1;
+            if (!otaTaskHandle) xTaskCreatePinnedToCore(otaUpdateTask, "OtaTask", STACK_NETWORK, NULL, PRIO_NETWORK, &otaTaskHandle, 1);
+        } else if (level == MENU_WEB_SERVER) { isViewingFile = false; webServer.runBgUpload(); }
         return; 
     }
     
     if (level == MENU_MAIN) encoder.setBoundaries(0, 6, true);         
     else if (level == MENU_CONTROL) encoder.setBoundaries(0, 4, true); 
-    else if (level == MENU_LAMP) encoder.setBoundaries(0, 4, true);    
-    else if (level == MENU_USB_MODE) {
-        storage.loadFiles(); 
-        encoder.setBoundaries(0, storage.fileCount, true); 
-    }
-    else if (level == MENU_SELECT_BG) {
-        storage.loadBgFiles();
-        encoder.setBoundaries(0, storage.bgFileCount, true); 
-    }
+    else if (level == MENU_USB_MODE) { storage.loadFiles(); encoder.setBoundaries(0, storage.fileCount, true); }
+    else if (level == MENU_SELECT_BG) { storage.loadBgFiles(); encoder.setBoundaries(0, storage.bgFileCount, true); }
     else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) encoder.setBoundaries(0, 1000, false); 
     
     encoder.setEncoderValue(0);
@@ -377,14 +308,11 @@ void AppLogic::enterMenu(int level) {
 void AppLogic::exitMenu() {
     if (appState.currentMenu == MENU_STOCK || appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
-        WiFi.disconnect(); 
-        WiFi.mode(WIFI_OFF);
-        espNow.begin(); 
+        WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 
     }
     appState.currentMenu = MENU_NONE;
     encoder.setBoundaries(0, 100, false);
     encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
-    // LƯU CẤU HÌNH: Lưu lại khi thoát bất cứ menu nào về màn hình chính
     storage.saveConfig(appState); 
 }
 
