@@ -125,6 +125,7 @@ void AppLogic::handleEvents() {
                     display.closeImagePreview(); 
                     xSemaphoreGive(xGuiSemaphore);
                 }
+                encoder.setEncoderValue(appState.menuIndex);
                 if (appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) exitMenu();
             } else {
                 if (appState.currentMenu == MENU_NONE) enterMenu(MENU_MAIN);
@@ -140,8 +141,8 @@ void AppLogic::handleEvents() {
                     xSemaphoreGive(xGuiSemaphore);
                 }
             }
-            else if (isViewingImage && appState.currentMenu != MENU_SELECT_BG) {
-                // Đang xem ảnh ở USB Mode -> Khóa cuộn để tránh nhảy menu ẩn
+            else if (isViewingImage) {
+                // Đang xem ảnh thì khóa cuộn, không cho Update UI nhảy menu
                 ui_needs_update = false; 
             }
             else if (appState.currentMenu == MENU_NONE || appState.currentMenu == MENU_SET_SLEEP || appState.currentMenu == MENU_SET_BACKLIGHT) {
@@ -168,31 +169,9 @@ void AppLogic::handleEvents() {
                 }
             }
             else {
+                // Di chuyển focus bình thường cho mọi Menu
                 appState.menuIndex = encoder.getEncoderValue(); 
                 if (appState.currentMenu == MENU_STOCK) appState.stockIndex = appState.menuIndex;
-
-                // [FIX LỖI 1]: Tự động đổi ảnh Preview khi cuộn trong mục Chọn Hình Nền
-                if (isViewingImage && appState.currentMenu == MENU_SELECT_BG) {
-                    if (appState.menuIndex == storage.bgFileCount) {
-                        // Cuộn xuống nút Back -> Tắt ảnh Preview
-                        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
-                            display.closeImagePreview();
-                            xSemaphoreGive(xGuiSemaphore);
-                        }
-                    } else {
-                        char fullPath[64];
-                        snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
-                        strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
-                        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                            FsFile file = sd_bg.open(fullPath, O_READ);
-                            if (file) {
-                                display.showImagePreview(file);
-                                file.close();
-                            }
-                            xSemaphoreGive(xGuiSemaphore);
-                        }
-                    }
-                }
             }
         }
 
@@ -205,6 +184,7 @@ void AppLogic::handleEvents() {
                     display.closeImagePreview();
                     xSemaphoreGive(xGuiSemaphore);
                 }
+                encoder.setEncoderValue(appState.menuIndex);
             } else {
                 switch (appState.currentMenu) {
                     case MENU_MAIN:
@@ -245,16 +225,20 @@ void AppLogic::handleEvents() {
                         } else {
                             char fullPath[64];
                             snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
-                            if (isViewingImage && strcmp(appState.bgFilePath, fullPath) == 0) {
+                            
+                            if (isViewingImage) { 
+                                // Bấm lần 2: Áp dụng ảnh đang xem làm BG
+                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 storage.saveConfig(appState);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     display.closeImagePreview();
                                     display.loadBackgroundFromSD();
                                     xSemaphoreGive(xGuiSemaphore);
                                 }
-                                isViewingImage = false; exitMenu(); 
+                                isViewingImage = false; 
+                                exitMenu(); 
                             } else {
-                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
+                                // Bấm lần 1: Mở chế độ xem trước ảnh
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     FsFile file = sd_bg.open(fullPath, O_READ);
                                     if (file) {
@@ -285,12 +269,11 @@ void AppLogic::handleEvents() {
                             }
                         }
                         break;
-                    // [FIX LỖI 2]: Thêm sự kiện Click cho MENU_OTA để chọn cài đặt
                     case MENU_OTA:
                         if (appState.menuIndex == ota.versionCount) {
-                            exitMenu(); // Nhấn Back
+                            exitMenu(); 
                         } else {
-                            selectedOtaIndex = appState.menuIndex; // Nạp index cho otaTask chạy
+                            selectedOtaIndex = appState.menuIndex; 
                         }
                         break;
                     case MENU_NONE:
