@@ -7,7 +7,8 @@ extern SdFs sd_bg;
 
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
-    if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) {
+    // Tăng lên 20MHz để ổn định luồng dữ liệu 115KB ảnh
+    if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(20)))) {
         isReady = true;
         Serial.println("[STORAGE] SD Mount OK!");
         
@@ -25,7 +26,7 @@ void StorageLogic::begin() {
 
 void StorageLogic::loadFiles() {
     if (!isReady) {
-        if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) {
+        if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(20)))) {
             isReady = true;
         } else return;
     }
@@ -41,7 +42,6 @@ void StorageLogic::loadFiles() {
         char name[32];
         file.getName(name, 32);
         
-        // Bỏ qua file không có tên hoặc file hệ thống rác
         if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
             if (fileCount < 14) {
                 strcpy(fileNames[fileCount], name);
@@ -104,7 +104,8 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
     size_t size = file.size();
     size_t readSize = size > 2048 ? 2048 : size;
 
-    char* buffer = (char*)malloc(readSize + 1);
+    // Sử dụng PSRAM cho buffer text lớn
+    char* buffer = (char*)heap_caps_malloc(readSize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (buffer) {
         file.read(buffer, readSize);
         buffer[readSize] = '\0'; 
@@ -115,19 +116,19 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
 }
 
 void StorageLogic::freePSRAMBuffer(char* buffer) {
-    if (buffer) free(buffer);
+    if (buffer) heap_caps_free(buffer);
 }
 
 void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;
     FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         doc["sleepTimeout"] = state.sleepTimeout;
         doc["oledBrightness"] = state.oledBrightness;
-        doc["brightness"] = state.brightness;     // Bổ sung dòng này
-        doc["temperature"] = state.temperature;   // Bổ sung dòng này
-        doc["bgFilePath"] = state.bgFilePath;     // Bổ sung dòng này (để lưu hình nền)
+        doc["brightness"] = state.brightness;
+        doc["temperature"] = state.temperature;
+        doc["bgFilePath"] = state.bgFilePath;
         serializeJson(doc, file);
         file.close();
         Serial.println("[STORAGE] Config saved!");
@@ -138,16 +139,17 @@ bool StorageLogic::loadConfig(RemoteState &state) {
     if (!isReady) return false;
     FsFile file = sd_bg.open("/config.json", O_READ);
     if (file) {
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         DeserializationError error = deserializeJson(doc, file);
         if (!error) {
             state.sleepTimeout = doc["sleepTimeout"] | 30;
             state.oledBrightness = doc["oledBrightness"] | 50;
-            state.brightness = doc["brightness"] | 50;       // Bổ sung
-            state.temperature = doc["temperature"] | 50;     // Bổ sung
+            state.brightness = doc["brightness"] | 50;
+            state.temperature = doc["temperature"] | 50;
             if (doc.containsKey("bgFilePath")) {
                 strlcpy(state.bgFilePath, doc["bgFilePath"], sizeof(state.bgFilePath));
             }
+            Serial.println("[STORAGE] Config loaded successfully!");
         }
         file.close();
         return true;
