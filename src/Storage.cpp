@@ -35,38 +35,36 @@ void StorageLogic::loadFiles() {
         char name[32];
         file.getName(name, 32);
         
-        // CÚ CHỐT: Bỏ qua file không có tên hoặc file hệ thống rác
-        if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
-            if (fileCount < 14) {
-                strcpy(fileNames[fileCount], name);
-                Serial.printf("  [%d] Found: %s (%llu bytes)\n", fileCount, name, (uint64_t)file.size());
-                fileCount++;
-            }
+        String fName = String(name);
+        
+        // CÚ CHỐT: Lọc bỏ toàn bộ file rác, file cấu hình và file text hệ thống
+        if (fName == "System Volume Information" || 
+            fName == "active_bg.txt" || 
+            fName == "config.json" || 
+            fName == "config.txt") {
+            file.close();
+            continue;
+        }
+        
+        if (fileCount < 15) {
+            strncpy(fileNames[fileCount], name, 32);
+            fileCount++;
         }
         file.close();
     }
     dir.close();
-    Serial.printf("[STORAGE] Scan finished. Total: %d files.\n", fileCount);
 }
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
     if (!isReady) return NULL;
 
-    // Mở trực tiếp bằng tên file, SdFat sẽ tìm ở thư mục hiện tại (root)
     FsFile file = sd_bg.open(filename, O_READ);
     if (!file) {
-        // Nếu không mở được, thử thêm dấu / vào đầu
-        char path[40];
-        sprintf(path, "/%s", filename);
-        file = sd_bg.open(path, O_READ);
-    }
-
-    if (!file) {
-        Serial.printf("[STORAGE] Critical Error: Cannot open %s\n", filename);
+        Serial.println("[STORAGE] File not found!");
         return NULL;
     }
 
-    if (strstr(filename, ".bin") != NULL || strstr(filename, ".img") != NULL) {
+    if (String(filename).endsWith(".bin") || String(filename).endsWith(".BIN")) {
         file.close();
         char* buffer = (char*)malloc(128);
         strcpy(buffer, "[BINARY/IMAGE FILE]\n\nFile nay qua lon hoac la file nhi phan.\nRemote khong the hien thi noi dung.");
@@ -74,7 +72,6 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
     }
 
     size_t size = file.size();
-    // Giới hạn đọc 2KB để tránh tràn RAM
     size_t readSize = size > 2048 ? 2048 : size;
 
     char* buffer = (char*)malloc(readSize + 1);
@@ -109,12 +106,12 @@ bool StorageLogic::loadConfig(RemoteState &state) {
     if (file) {
         StaticJsonDocument<256> doc;
         DeserializationError error = deserializeJson(doc, file);
-        if (!error) {
-            state.sleepTimeout = doc["sleepTimeout"] | 30;
-            state.oledBrightness = doc["oledBrightness"] | 50;
-        }
         file.close();
-        return true;
+        if (!error) {
+            state.sleepTimeout = doc["sleepTimeout"] | 60;
+            state.oledBrightness = doc["oledBrightness"] | 80;
+            return true;
+        }
     }
     return false;
 }

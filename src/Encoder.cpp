@@ -1,6 +1,5 @@
 #include "Encoder.h"
 
-// --- FIX LỖI ENCODER: Khai báo mượn biến Queue từ main ---
 extern QueueHandle_t xEncoderQueue;
 
 EncoderLogic encoder;
@@ -14,7 +13,7 @@ void EncoderLogic::begin() {
     rotaryEncoder.begin();
     rotaryEncoder.setup(readEncoderISR);
     
-    // CÚ CHỐT 1: Tắt hoàn toàn gia tốc. Vặn 1 khấc là chỉ nhảy 1 đơn vị, cấm nhảy cóc!
+    // Tắt gia tốc để vặn chuẩn xác 1 khấc = 1 số
     rotaryEncoder.disableAcceleration(); 
 
     pinMode(ROTARY_BTN_PIN, INPUT_PULLUP);
@@ -39,29 +38,18 @@ bool EncoderLogic::shouldSleep(uint32_t timeout) {
 }
 
 void EncoderLogic::loop() {
-    static uint32_t last_enc_time = 0;
-    
     // ==========================================
-    // 1. XỬ LÝ VẶN NÚM (CÓ DEBOUNCE CHỐNG RUNG)
+    // 1. XỬ LÝ VẶN NÚM 
+    // Trả lại logic nguyên bản: Để thư viện tự chống rung bằng ngắt phần cứng, vặn mượt mà
     // ==========================================
     if (rotaryEncoder.encoderChanged()) {
-        uint32_t current_time = millis();
-        
-        // CÚ CHỐT 2: Phải cách nhau ít nhất 30ms mới tính là 1 lần vặn.
-        // Dưới 30ms thì chắc chắn là do lá đồng bên trong đang bị rung (Bouncing)
-        if (current_time - last_enc_time > 30) { 
-            int current_val = rotaryEncoder.readEncoder();
-            EncoderEvent ev = (current_val > lastEncoderValue) ? ENC_UP : ENC_DOWN;
-            lastEncoderValue = current_val;
-            lastInteractionTime = current_time;
-            last_enc_time = current_time;
+        int current_val = rotaryEncoder.readEncoder();
+        EncoderEvent ev = (current_val > lastEncoderValue) ? ENC_UP : ENC_DOWN;
+        lastEncoderValue = current_val;
+        lastInteractionTime = millis();
 
-            if (xEncoderQueue != NULL) {
-                xQueueSend(xEncoderQueue, &ev, 0);
-            }
-        } else {
-            // Nếu phát hiện rung nhiễu, ép nó trả lại giá trị cũ, không cho nhảy số!
-            rotaryEncoder.setEncoderValue(lastEncoderValue);
+        if (xEncoderQueue != NULL) {
+            xQueueSend(xEncoderQueue, &ev, 0);
         }
     }
 
