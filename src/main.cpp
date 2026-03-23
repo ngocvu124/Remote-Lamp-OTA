@@ -17,19 +17,11 @@ QueueHandle_t xEspNowQueue = NULL;
 volatile bool isGuiReady = false; 
 volatile bool isStorageReady = false;
 
-// --- KHAI BÁO CẤU TRÚC STATIC TASK ---
+// --- KHAI BÁO CẤU TRÚC STATIC TASK (BỘ NHỚ QUẢN LÝ) ---
 StaticTask_t guiTaskBuf, inputTaskBuf, appTaskBuf, batTaskBuf, nowTaskBuf;
 
-// --- CẤP PHÁT STACK TRÊN PSRAM ---
-// Sử dụng heap_caps_malloc với cờ MALLOC_CAP_SPIRAM
-StackType_t *guiStack = (StackType_t *)heap_caps_malloc(STACK_GUI, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-StackType_t *inputStack = (StackType_t *)heap_caps_malloc(4096, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-StackType_t *appStack = (StackType_t *)heap_caps_malloc(STACK_SYSTEM, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-StackType_t *batStack = (StackType_t *)heap_caps_malloc(4096, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-StackType_t *nowStack = (StackType_t *)heap_caps_malloc(8192, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-
 // ==========================================
-// TASK 1: GUI (CORE 0)
+// TASK 1: GUI (CORE 0) - HỌA SĨ MÀN HÌNH
 // ==========================================
 void guiTask(void *pvParameters) {
     display.begin();  
@@ -51,10 +43,11 @@ void guiTask(void *pvParameters) {
 }
 
 // ==========================================
-// TASK 2: INPUT (CORE 1)
+// TASK 2: INPUT (CORE 1) - LÍNH GÁC CỔNG
 // ==========================================
 void inputTask(void *pvParameters) {
     while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
+    
     encoder.begin();  
 
     while (1) {
@@ -64,7 +57,7 @@ void inputTask(void *pvParameters) {
 }
 
 // ==========================================
-// TASK 3: APP LOGIC (CORE 1)
+// TASK 3: APP LOGIC (CORE 1) - TỔNG GIÁM ĐỐC
 // ==========================================
 void appTask(void *pvParameters) {
     while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
@@ -99,7 +92,7 @@ void appTask(void *pvParameters) {
 }
 
 // ==========================================
-// TASK 4: BATTERY (CORE 1)
+// TASK 4: BATTERY (CORE 1) - BÁC SĨ KHÁM BỆNH
 // ==========================================
 void batteryTask(void *pvParameters) {
     while (!isStorageReady) vTaskDelay(pdMS_TO_TICKS(100)); 
@@ -112,7 +105,7 @@ void batteryTask(void *pvParameters) {
 }
 
 // ==========================================
-// TASK 5: ESP NOW (CORE 1)
+// TASK 5: ESP NOW (CORE 1) - NGƯỜI ĐƯA THƯ
 // ==========================================
 void espNowTask(void *pvParameters) {
     while (!isStorageReady) vTaskDelay(pdMS_TO_TICKS(100));
@@ -132,40 +125,59 @@ void espNowTask(void *pvParameters) {
 void setup() {
     sys.begin(); 
     Serial.begin(115200);
+    delay(1000); 
+    
+    Serial.println("\n--- REMOTE LAMP STARTING (PSRAM OPTIMIZED) ---");
 
-    // Kiểm tra PSRAM đã sẵn sàng chưa
-    if (psramInit()) {
-        Serial.println("[SYSTEM] PSRAM Initialized OK!");
+    // 1. Kiểm tra PSRAM
+    if (!psramInit()) {
+        Serial.println("[ERROR] PSRAM not found! Tasks will use Internal RAM.");
     } else {
-        Serial.println("[SYSTEM] PSRAM Failed! System might crash.");
+        Serial.printf("[OK] PSRAM Detected: %d MB\n", ESP.getPsramSize() / 1024 / 1024);
     }
 
     xGuiSemaphore = xSemaphoreCreateMutex();
-    // Queue vẫn nên để ở RAM nội để đảm bảo tốc độ phản hồi
     xEncoderQueue = xQueueCreate(10, sizeof(EncoderEvent));
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 
 
-    // Kiểm tra việc cấp phát Stack trên PSRAM
-    if (guiStack == NULL || inputStack == NULL || appStack == NULL || batStack == NULL || nowStack == NULL) {
-        Serial.println("[CRITICAL] Failed to allocate Task Stacks on PSRAM!");
-        return;
-    }
+    // 2. Hàm cấp phát thông minh: Thử PSRAM trước, xịt thì lấy RAM nội
+    auto safeAlloc = [](size_t size, const char* taskName) -> StackType_t* {
+        StackType_t* ptr = (StackType_t*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (ptr) {
+            Serial.printf("[MEM] %s Stack allocated on PSRAM\n", taskName);
+        } else {
+            ptr = (StackType_t*)heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            Serial.printf("[MEM] %s Stack allocated on Internal RAM (PSRAM Full/Missing)\n", taskName);
+        }
+        return ptr;
+    };
 
-    if (xGuiSemaphore != NULL && xEncoderQueue != NULL && xEspNowQueue != NULL) {
+    // 3. Cấp phát vùng nhớ Stack
+    StackType_t *guiStack   = safeAlloc(STACK_GUI, "GuiTask");
+    StackType_t *inputStack = safeAlloc(4096, "InputTask");
+    StackType_t *appStack   = safeAlloc(STACK_SYSTEM, "AppTask");
+    StackType_t *batStack   = safeAlloc(4096, "BatTask");
+    StackType_t *nowStack   = safeAlloc(8192, "EspTask");
+
+    if (guiStack && inputStack && appStack && batStack && nowStack) {
         
-        // --- CHUYỂN SANG XTASKCREATESTATIC ĐỂ DÙNG PSRAM ---
-
-        // CORE 0
+        // CORE 0: Đồ họa hạng nặng
         xTaskCreateStaticPinnedToCore(guiTask, "GuiTask", STACK_GUI, NULL, PRIO_GUI, guiStack, &guiTaskBuf, 0);
         
-        // CORE 1
+        // CORE 1: Các logic còn lại
         xTaskCreateStaticPinnedToCore(inputTask, "InputTask", 4096, NULL, PRIO_INPUT, inputStack, &inputTaskBuf, 1);
         xTaskCreateStaticPinnedToCore(appTask, "AppTask", STACK_SYSTEM, NULL, PRIO_SYSTEM, appStack, &appTaskBuf, 1);
         xTaskCreateStaticPinnedToCore(espNowTask, "EspTask", 8192, NULL, PRIO_SYSTEM + 1, nowStack, &nowTaskBuf, 1);
         xTaskCreateStaticPinnedToCore(batteryTask, "BatTask", 4096, NULL, 1, batStack, &batTaskBuf, 1); 
+        
+        Serial.println("[SYSTEM] All Static Tasks created successfully.");
+    } else {
+        Serial.println("[CRITICAL] Memory Allocation Failed! Check PSRAM configuration.");
+        while(1) { delay(1000); }
     }
 }
 
 void loop() {
+    // Xóa task setup để giải phóng tài nguyên
     vTaskDelete(NULL);
 }
