@@ -13,11 +13,20 @@ void EncoderLogic::begin() {
     rotaryEncoder.begin();
     rotaryEncoder.setup(readEncoderISR);
     
-    // Tắt gia tốc để vặn chuẩn xác 1 khấc = 1 số
-    rotaryEncoder.disableAcceleration(); 
+    // Mặc định khởi động lên màn hình chính là bật sẵn gia tốc
+    rotaryEncoder.setAcceleration(250); 
 
     pinMode(ROTARY_BTN_PIN, INPUT_PULLUP);
     lastInteractionTime = millis();
+}
+
+// Hàm này sẽ được AppTask gọi để bật/tắt tùy theo Menu
+void EncoderLogic::setAcceleration(bool enabled) {
+    if (enabled) {
+        rotaryEncoder.setAcceleration(250);
+    } else {
+        rotaryEncoder.disableAcceleration();
+    }
 }
 
 void EncoderLogic::setBoundaries(int minVal, int maxVal, bool circleValues) {
@@ -38,10 +47,6 @@ bool EncoderLogic::shouldSleep(uint32_t timeout) {
 }
 
 void EncoderLogic::loop() {
-    // ==========================================
-    // 1. XỬ LÝ VẶN NÚM 
-    // Trả lại logic nguyên bản: Để thư viện tự chống rung bằng ngắt phần cứng, vặn mượt mà
-    // ==========================================
     if (rotaryEncoder.encoderChanged()) {
         int current_val = rotaryEncoder.readEncoder();
         EncoderEvent ev = (current_val > lastEncoderValue) ? ENC_UP : ENC_DOWN;
@@ -53,9 +58,6 @@ void EncoderLogic::loop() {
         }
     }
 
-    // ==========================================
-    // 2. XỬ LÝ BẤM NÚT (CHỐNG NHÁY ĐÚP & LONG PRESS)
-    // ==========================================
     uint8_t currentButtonState = digitalRead(ROTARY_BTN_PIN);
     
     if (currentButtonState != lastButtonState) {
@@ -64,13 +66,10 @@ void EncoderLogic::loop() {
         
         if (currentButtonState != lastButtonState) {
             if (currentButtonState == LOW) { 
-                // Nút bắt đầu bị đè xuống
                 buttonPressTime = millis();
                 isLongPressHandled = false;
             } else { 
-                // Nút được nhả ra
                 if (!isLongPressHandled && (millis() - buttonPressTime < 1000)) {
-                    // Nếu thời gian đè < 1 giây thì tính là Click bình thường
                     lastInteractionTime = millis();
                     EncoderEvent ev = ENC_CLICK;
                     if (xEncoderQueue != NULL) {
@@ -82,7 +81,6 @@ void EncoderLogic::loop() {
         }
     }
 
-    // Xử lý giữ rịt nút (Long Press > 1 giây) để thoát Menu
     if (currentButtonState == LOW && !isLongPressHandled) {
         if (millis() - buttonPressTime >= 1000) {
             isLongPressHandled = true;

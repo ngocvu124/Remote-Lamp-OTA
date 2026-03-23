@@ -13,6 +13,7 @@ public:
     void setEncoderValue(int val);
     int getEncoderValue();
     bool shouldSleep(uint32_t timeout);
+    void setAcceleration(bool enabled); // Hàm mới
 
 private:
     int lastEncoderValue = 0;

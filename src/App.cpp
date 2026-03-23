@@ -53,22 +53,32 @@ void AppLogic::enterMenu(int level) {
     appState.currentMenu = (MenuLevel)level;
     appState.menuIndex = 0;
 
-    if (level == MENU_MAIN) encoder.setBoundaries(0, 6, true);
-    else if (level == MENU_CONTROL || level == MENU_LAMP) encoder.setBoundaries(0, 4, true);
+    // VÀO MENU LÀ TẮT GIA TỐC (1 KHẤC = 1 MỤC)
+    if (level == MENU_MAIN) {
+        encoder.setBoundaries(0, 6, true);
+        encoder.setAcceleration(false);
+    }
+    else if (level == MENU_CONTROL || level == MENU_LAMP) {
+        encoder.setBoundaries(0, 4, true);
+        encoder.setAcceleration(false);
+    }
     else if (level == MENU_USB_MODE || level == MENU_CHANGE_BG_LOCAL) {
         storage.loadFiles(); 
         encoder.setBoundaries(0, storage.fileCount, true); 
+        encoder.setAcceleration(false);
     }
     else if (level == MENU_STOCK) {
         originalSleepTimeout = appState.sleepTimeout;
         appState.sleepTimeout = 300;
         encoder.setBoundaries(0, 10, true);
+        encoder.setAcceleration(false);
         encoder.setEncoderValue(appState.stockIndex);
         return;
     }
     else if (level == MENU_OTA) {
         originalSleepTimeout = appState.sleepTimeout;
         appState.sleepTimeout = 300;
+        encoder.setAcceleration(false);
         if (webServer.runWiFiSetup()) {
             if (ota.fetchVersions()) encoder.setBoundaries(0, ota.versionCount, true);
             else { appState.currentMenu = MENU_MAIN; encoder.setBoundaries(0, 6, true); }
@@ -79,10 +89,15 @@ void AppLogic::enterMenu(int level) {
     else if (level == MENU_WEB_SERVER) {
         originalSleepTimeout = appState.sleepTimeout;
         appState.sleepTimeout = 600; 
+        encoder.setAcceleration(false);
         webServer.runWebServerOnly();
         return;
     }
-    else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) encoder.setBoundaries(0, 1000, false); 
+    // CÚ CHỐT: CHỈ BẬT LẠI GIA TỐC KHI CHỈNH SỐ TO
+    else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) {
+        encoder.setBoundaries(0, 1000, false); 
+        encoder.setAcceleration(true); 
+    }
     
     encoder.setEncoderValue(0);
 }
@@ -97,6 +112,9 @@ void AppLogic::exitMenu() {
     }
     appState.currentMenu = MENU_NONE;
     encoder.setBoundaries(0, 100, false);
+    
+    // THOÁT RA MÀN HÌNH CHÍNH (ĐỘ SÁNG/TEMP) THÌ BẬT GIA TỐC
+    encoder.setAcceleration(true); 
     encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
 }
 
@@ -109,13 +127,13 @@ void AppLogic::handleEvents() {
             if (isViewingFile || isViewingImage) {
                 isViewingFile = false;
                 isViewingImage = false;
-                // Bọc khóa an toàn
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                     display.showFileContent(NULL, NULL);
                     display.closeImagePreview();
                     xSemaphoreGive(xGuiSemaphore);
                 }
                 encoder.setBoundaries(0, storage.fileCount, true);
+                encoder.setAcceleration(false); // Khóa gia tốc khi về lại menu file
                 encoder.setEncoderValue(appState.menuIndex);
             }
             else if (appState.currentMenu != MENU_NONE) exitMenu();
@@ -139,14 +157,12 @@ void AppLogic::handleEvents() {
         else {
             if (isViewingFile) {
                 if (ev == ENC_UP) {
-                    // Bọc khóa an toàn
                     if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) { 
                         display.showFileContent("SCROLL_UP", NULL); 
                         xSemaphoreGive(xGuiSemaphore); 
                     }
                 }
                 else if (ev == ENC_DOWN) {
-                    // Bọc khóa an toàn
                     if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) { 
                         display.showFileContent("SCROLL_DOWN", NULL); 
                         xSemaphoreGive(xGuiSemaphore); 
@@ -162,8 +178,6 @@ void AppLogic::handleEvents() {
                     appState.sleepTimeout = 30 + (v * (300 - 30) / 1000);
                 } else if (appState.currentMenu == MENU_SET_BACKLIGHT) {
                     appState.oledBrightness = encoder.getEncoderValue() / 10;
-                    
-                    // Lệnh setContrast gọi thẳng vào driver, không cần LVGL, an toàn
                     display.setContrast(appState.oledBrightness);
                 } else {
                     appState.menuIndex = encoder.getEncoderValue();
@@ -208,7 +222,6 @@ void AppLogic::handleEvents() {
                     if (appState.menuIndex == storage.fileCount) enterMenu(MENU_CONTROL);
                     else {
                         char* selectedFile = storage.fileNames[appState.menuIndex];
-                        // Bọc khóa an toàn LVGL khi load lại ảnh mới
                         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                             FsFile activeFile = sd_bg.open("/active_bg.txt", O_WRITE | O_CREAT | O_TRUNC);
                             if (activeFile) {
@@ -233,25 +246,25 @@ void AppLogic::handleEvents() {
                     else {
                         char* fName = storage.fileNames[appState.menuIndex];
                         if (String(fName).endsWith(".bin") || String(fName).endsWith(".BIN")) {
-                            // Bọc khóa an toàn
                             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 FsFile f = sd_bg.open(fName, O_READ);
                                 if(display.showImagePreview(f)) {
                                     isViewingImage = true;
                                     encoder.setBoundaries(0, 0, false);
+                                    encoder.setAcceleration(false);
                                 }
                                 f.close();
                                 xSemaphoreGive(xGuiSemaphore);
                             }
                         } else {
                             char* content = storage.readFileToPSRAM(fName);
-                            // Bọc khóa an toàn
                             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent(fName, content);
                                 xSemaphoreGive(xGuiSemaphore);
                             }
                             isViewingFile = true;
                             encoder.setBoundaries(0, 100, false);
+                            encoder.setAcceleration(true); // Nếu bác đọc file text dài thì có tý gia tốc cho lướt nhanh
                             encoder.setEncoderValue(0);
                         }
                     }
@@ -267,7 +280,6 @@ void AppLogic::handleEvents() {
             }
         }
 
-        // CÚ CHỐT: Chỉ gọi duy nhất 1 lần UpdateUI ở cuối luồng, và ĐƯỢC BỌC KHÓA AN TOÀN
         if (needUpdateUI) {
             if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
                 display.updateUI(appState);
