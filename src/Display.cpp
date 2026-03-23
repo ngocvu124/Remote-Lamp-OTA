@@ -20,9 +20,6 @@ static uint8_t* preview_data_buffer = NULL;
 static lv_img_dsc_t preview_img_dsc;        
 static lv_obj_t* preview_img_obj = NULL;    
 
-// TÁCH RỜI MẢNG NÚT BẤM KHỎI CLASS ĐỂ CHỐNG TRÀN BỘ NHỚ
-static lv_obj_t* g_menuBtns[30]; 
-
 #define BACKLIGHT_CHANNEL 0 
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
@@ -114,7 +111,13 @@ void DisplayLogic::loadBackgroundFromSD() {
             custom_bg.data_size = 115200;
             custom_bg.data = bg_data_buffer;
             
+            // Xóa cache của LVGL
             lv_img_cache_invalidate_src(NULL);
+            
+            // CÚ CHỐT SỬA MÀN HÌNH ĐEN: Gỡ hình cũ ra trước khi áp hình mới
+            lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
+            lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
+            lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
             
             lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
             lv_obj_set_style_bg_opa(objects.main, 0, 0);
@@ -124,8 +127,6 @@ void DisplayLogic::loadBackgroundFromSD() {
             lv_obj_set_style_bg_opa(objects.stock, 0, 0);
             
             lv_obj_invalidate(objects.main);
-            lv_obj_invalidate(objects.menu);
-            lv_obj_invalidate(objects.stock);
         }
     }
     file.close();
@@ -137,9 +138,10 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
     lv_obj_clean(objects.cont_menu_text); 
     currentMenuCount = count;
     
-    for(int i = 0; i < 30; i++) g_menuBtns[i] = NULL;
-    
     for(int i = 0; i < count; i++) {
+        // Bảo vệ mảng tĩnh menuButtons[15] được khai báo trong Display.h gốc
+        if (i >= 15) break; 
+        
         lv_obj_t * btn = lv_btn_create(objects.cont_menu_text);
         lv_obj_set_size(btn, 220, 35); 
         lv_obj_set_style_bg_color(btn, lv_color_hex(0x222222), LV_PART_MAIN); 
@@ -154,7 +156,7 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
         lv_label_set_text(label, items[i]);
         lv_obj_center(label); 
         
-        g_menuBtns[i] = btn;
+        menuButtons[i] = btn;
     }
 }
 
@@ -207,7 +209,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 5);
             }
             else if (state.currentMenu == MENU_USB_MODE || state.currentMenu == MENU_OTA || state.currentMenu == MENU_SELECT_BG) {
-                const char* items[30]; 
+                const char* items[15]; 
                 int count = 0;
                 
                 if (state.currentMenu == MENU_USB_MODE) {
@@ -229,13 +231,14 @@ void DisplayLogic::updateUI(RemoteState &state) {
         }
 
         for (int i = 0; i < currentMenuCount; i++) {
-            if (g_menuBtns[i] == NULL) continue;
+            if (i >= 15) break; 
+            if (menuButtons[i] == NULL) continue;
             
             if (i == state.menuIndex) {
-                lv_obj_add_state(g_menuBtns[i], LV_STATE_CHECKED);
-                lv_obj_scroll_to_view(g_menuBtns[i], LV_ANIM_ON);
+                lv_obj_add_state(menuButtons[i], LV_STATE_CHECKED);
+                lv_obj_scroll_to_view(menuButtons[i], LV_ANIM_ON);
             } else {
-                lv_obj_clear_state(g_menuBtns[i], LV_STATE_CHECKED);
+                lv_obj_clear_state(menuButtons[i], LV_STATE_CHECKED);
             }
         }
     }
