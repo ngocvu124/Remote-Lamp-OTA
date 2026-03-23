@@ -22,7 +22,6 @@ static lv_obj_t* preview_img_obj = NULL;
 
 #define BACKLIGHT_CHANNEL 0 
 
-// Đã cập nhật đủ 7 mục menu đồng bộ với App.cpp
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
@@ -56,7 +55,6 @@ void DisplayLogic::begin() {
 
     lv_init();
 
-    // Cấp phát buffer vẽ vào PSRAM
     buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
     if (!buf1) buf1 = (lv_color_t*)malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t)); 
     lv_disp_draw_buf_init(&draw_buf, buf1, NULL, SCREEN_WIDTH * 40);
@@ -84,64 +82,63 @@ void DisplayLogic::begin() {
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
-    Serial.println("[DISPLAY] Loading background from SD...");
-    
-    // Khóa màn hình lại để ưu tiên đọc thẻ SD, tránh nhiễu do xung đột bus SPI
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(2000))) {
-        // Tăng tốc độ đọc SD lên 20MHz để nạp ảnh mượt hơn
+        Serial.printf("[DISPLAY] Loading background: %s\n", appState.bgFilePath);
+        
         if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(20)))) {
-            Serial.println("[DISPLAY] SD Begin Failed in loadBackground.");
             xSemaphoreGive(xGuiSemaphore);
             return; 
         }
         
         FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
         if (!file) {
+            Serial.println("[DISPLAY] Custom BG not found, trying /bg.bin");
             file = sd_bg.open("/bg.bin", O_READ);
-            if (!file) {
-                Serial.println("[DISPLAY] bg.bin not found on SD.");
-                xSemaphoreGive(xGuiSemaphore);
-                return;
-            }
         }
 
-        size_t fileSize = file.size();
-        if (fileSize < 115200) { 
-            Serial.printf("[DISPLAY] bg.bin size error: %d bytes\n", fileSize);
-            file.close(); 
+        if (!file) {
+            Serial.println("[DISPLAY] No background file found on SD!");
             xSemaphoreGive(xGuiSemaphore);
-            return; 
-        } 
+            return;
+        }
+
+        if (file.size() < 115200) {
+            Serial.printf("[DISPLAY] Error: File too small (%d bytes)\n", (int)file.size());
+            file.close();
+            xSemaphoreGive(xGuiSemaphore);
+            return;
+        }
 
         if (bg_data_buffer != NULL) {
             heap_caps_free(bg_data_buffer);
             bg_data_buffer = NULL;
         }
 
-        // Cấp phát với CAP_8BIT để dữ liệu ảnh được sắp xếp chính xác trong PSRAM
         bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         
         if (bg_data_buffer) {
             size_t bytesRead = file.read(bg_data_buffer, 115200);
-            Serial.printf("[DISPLAY] Successfully read %d bytes for background\n", bytesRead);
-
-            custom_bg.header.always_zero = 0;
-            custom_bg.header.w = 240;
-            custom_bg.header.h = 240;
-            custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
-            custom_bg.data_size = 115200;
-            custom_bg.data = bg_data_buffer;
-            
-            lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
-            lv_obj_set_style_bg_opa(objects.main, 0, 0);
-            lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
-            lv_obj_set_style_bg_opa(objects.menu, 0, 0);
-            lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
-            lv_obj_set_style_bg_opa(objects.stock, 0, 0);
-            Serial.println("[DISPLAY] Background applied successfully.");
+            if (bytesRead == 115200) {
+                custom_bg.header.always_zero = 0;
+                custom_bg.header.w = 240;
+                custom_bg.header.h = 240;
+                custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
+                custom_bg.data_size = 115200;
+                custom_bg.data = bg_data_buffer;
+                
+                lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
+                lv_obj_set_style_bg_opa(objects.main, 0, 0);
+                lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
+                lv_obj_set_style_bg_opa(objects.menu, 0, 0);
+                lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
+                lv_obj_set_style_bg_opa(objects.stock, 0, 0);
+                Serial.println("[DISPLAY] Background applied successfully.");
+            } else {
+                Serial.printf("[DISPLAY] Read error: only got %d bytes\n", bytesRead);
+            }
         }
         file.close();
-        xSemaphoreGive(xGuiSemaphore); // Nhả màn hình cho LVGL vẽ tiếp
+        xSemaphoreGive(xGuiSemaphore);
     }
 }
 
@@ -425,24 +422,27 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!preview_data_buffer) return false;
 
-    file.read(preview_data_buffer, 115200);
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+        file.read(preview_data_buffer, 115200);
 
-    preview_img_dsc.header.always_zero = 0;
-    preview_img_dsc.header.w = 240;
-    preview_img_dsc.header.h = 240;
-    preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-    preview_img_dsc.data_size = 115200;
-    preview_img_dsc.data = preview_data_buffer;
+        preview_img_dsc.header.always_zero = 0;
+        preview_img_dsc.header.w = 240;
+        preview_img_dsc.header.h = 240;
+        preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
+        preview_img_dsc.data_size = 115200;
+        preview_img_dsc.data = preview_data_buffer;
 
-    if (!preview_img_obj) {
-        preview_img_obj = lv_img_create(scr_image_preview);
-        lv_obj_center(preview_img_obj);
+        if (!preview_img_obj) {
+            preview_img_obj = lv_img_create(scr_image_preview);
+            lv_obj_center(preview_img_obj);
+        }
+        lv_img_set_src(preview_img_obj, &preview_img_dsc);
+
+        lv_scr_load(scr_image_preview);
+        xSemaphoreGive(xGuiSemaphore);
+        return true;
     }
-    lv_img_set_src(preview_img_obj, &preview_img_dsc);
-
-    lv_scr_load(scr_image_preview);
-    
-    return true;
+    return false;
 }
 
 void DisplayLogic::closeImagePreview() {

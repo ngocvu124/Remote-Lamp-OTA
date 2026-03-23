@@ -7,17 +7,19 @@ extern SdFs sd_bg;
 
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
-    // Tăng lên 20MHz để ổn định luồng dữ liệu 115KB ảnh
+    // Tăng tốc độ bus SPI lên 20MHz để nạp ảnh 115KB nhanh và ổn định
     if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(20)))) {
         isReady = true;
         Serial.println("[STORAGE] SD Mount OK!");
         
-        // Tạo thư mục nếu chưa có
+        // Kiểm tra và tạo thư mục background nếu chưa có
         if (!sd_bg.exists("/background")) {
             sd_bg.mkdir("/background");
+            Serial.println("[STORAGE] Created /background directory");
         }
         
         loadFiles();
+        loadBgFiles(); 
     } else {
         isReady = false;
         Serial.println("[STORAGE] SD Mount FAILED!");
@@ -25,11 +27,7 @@ void StorageLogic::begin() {
 }
 
 void StorageLogic::loadFiles() {
-    if (!isReady) {
-        if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(20)))) {
-            isReady = true;
-        } else return;
-    }
+    if (!isReady) return;
 
     fileCount = 0;
     FsFile dir = sd_bg.open("/"); 
@@ -42,6 +40,7 @@ void StorageLogic::loadFiles() {
         char name[32];
         file.getName(name, 32);
         
+        // Bỏ qua thư mục và file ẩn
         if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
             if (fileCount < 14) {
                 strcpy(fileNames[fileCount], name);
@@ -52,7 +51,6 @@ void StorageLogic::loadFiles() {
         file.close();
     }
     dir.close();
-    Serial.printf("[STORAGE] Scan finished. Total: %d files.\n", fileCount);
 }
 
 void StorageLogic::loadBgFiles() {
@@ -63,14 +61,16 @@ void StorageLogic::loadBgFiles() {
     if (!dir) return;
     dir.rewind();
 
+    Serial.println("[STORAGE] Scanning /background folder...");
     FsFile file;
     while (file.openNext(&dir, O_READ)) {
         char name[32];
         file.getName(name, 32);
         
         if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
-            if (bgFileCount < 14) {
+            if (bgFileCount < 15) {
                 strcpy(bgFileNames[bgFileCount], name);
+                Serial.printf("  [%d] Found BG: %s\n", bgFileCount, name);
                 bgFileCount++;
             }
         }
@@ -84,32 +84,33 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
 
     FsFile file = sd_bg.open(filename, O_READ);
     if (!file) {
-        char path[40];
+        char path[64];
         sprintf(path, "/%s", filename);
         file = sd_bg.open(path, O_READ);
     }
 
     if (!file) {
-        Serial.printf("[STORAGE] Critical Error: Cannot open %s\n", filename);
+        Serial.printf("[STORAGE] Error: Cannot open %s\n", filename);
         return NULL;
     }
 
+    // Nếu là file binary/ảnh thì không đọc nội dung text
     if (strstr(filename, ".bin") != NULL || strstr(filename, ".img") != NULL) {
         file.close();
-        char* buffer = (char*)malloc(128);
-        strcpy(buffer, "[BINARY/IMAGE FILE]\n\nFile nay qua lon hoac la file nhi phan.\nRemote khong the hien thi noi dung.");
+        char* buffer = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if(buffer) strcpy(buffer, "[BINARY/IMAGE FILE]\n\nKhong the hien thi noi dung file nhi phan.");
         return buffer;
     }
 
     size_t size = file.size();
     size_t readSize = size > 2048 ? 2048 : size;
 
-    // Sử dụng PSRAM cho buffer text lớn
+    // Cấp phát PSRAM cho dữ liệu text
     char* buffer = (char*)heap_caps_malloc(readSize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (buffer) {
         file.read(buffer, readSize);
         buffer[readSize] = '\0'; 
-        Serial.printf("[STORAGE] Read %d bytes from %s\n", readSize, filename);
+        Serial.printf("[STORAGE] Read %d bytes from %s\n", (int)readSize, filename);
     }
     file.close();
     return buffer;
@@ -121,6 +122,7 @@ void StorageLogic::freePSRAMBuffer(char* buffer) {
 
 void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;
+    // Dùng FsFile của SdFat
     FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
         StaticJsonDocument<512> doc;
@@ -129,9 +131,10 @@ void StorageLogic::saveConfig(RemoteState &state) {
         doc["brightness"] = state.brightness;
         doc["temperature"] = state.temperature;
         doc["bgFilePath"] = state.bgFilePath;
+        
         serializeJson(doc, file);
         file.close();
-        Serial.println("[STORAGE] Config saved!");
+        Serial.println("[STORAGE] Config saved to SD.");
     }
 }
 
@@ -149,7 +152,7 @@ bool StorageLogic::loadConfig(RemoteState &state) {
             if (doc.containsKey("bgFilePath")) {
                 strlcpy(state.bgFilePath, doc["bgFilePath"], sizeof(state.bgFilePath));
             }
-            Serial.println("[STORAGE] Config loaded successfully!");
+            Serial.printf("[STORAGE] Config loaded. Current BG: %s\n", state.bgFilePath);
         }
         file.close();
         return true;
