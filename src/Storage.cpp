@@ -8,25 +8,16 @@ extern SdFs sd_bg;
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
     
-    // Khóa tịt màn hình lại để không tranh chấp Bus SPI
-    pinMode(SCR_CS_PIN, OUTPUT);
-    digitalWrite(SCR_CS_PIN, HIGH);
-    
-    pinMode(SD_CS_PIN, OUTPUT);
-    digitalWrite(SD_CS_PIN, HIGH);
-    
-    delay(50); // Xả sạch nhiễu trên Bus SPI
-
-    // Thử mount ở tốc độ 8MHz, nếu dây dài tín hiệu kém tự động lùi về 4MHz để cứu vãn
-    if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(8)))) {
+    // Giao hoàn toàn quyền quản lý chân CS cho thư viện SdFat
+    if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)))) {
         isReady = true;
-        Serial.println("[STORAGE] SD Mount OK (8MHz)!");
-    } else if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)))) {
+        Serial.println("[STORAGE] SD Mount OK (16MHz)!");
+    } else if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(8)))) {
         isReady = true;
-        Serial.println("[STORAGE] SD Mount OK (4MHz Fallback)!");
+        Serial.println("[STORAGE] SD Mount OK (8MHz Fallback)!");
     } else {
         isReady = false;
-        Serial.println("[STORAGE] SD Mount FAILED! Vui lòng kiểm tra lại chân cắm.");
+        Serial.println("[STORAGE] SD Mount FAILED!");
         return;
     }
 

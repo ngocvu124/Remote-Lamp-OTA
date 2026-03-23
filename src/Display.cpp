@@ -20,6 +20,8 @@ static uint8_t* preview_data_buffer = NULL;
 static lv_img_dsc_t preview_img_dsc;        
 static lv_obj_t* preview_img_obj = NULL;    
 
+static lv_obj_t* g_menuBtns[30]; 
+
 #define BACKLIGHT_CHANNEL 0 
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
@@ -48,7 +50,7 @@ void DisplayLogic::begin() {
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, 255);      
 
-    SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
+    // ĐÃ GỠ BỎ SPI.begin() TẠI ĐÂY
     tft.init(240, 240); 
     tft.setRotation(0); 
     tft.invertDisplay(true);
@@ -82,49 +84,28 @@ void DisplayLogic::begin() {
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
-    Serial.printf("[DISPLAY] Loading background from: %s\n", appState.bgFilePath);
     FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
-    if (!file) {
-        Serial.println("[DISPLAY] Custom BG not found, trying /bg.bin");
-        file = sd_bg.open("/bg.bin", O_READ);
-    }
-    
-    if (!file) {
-        Serial.println("[DISPLAY-ERR] No background file found on SD!");
-        return;
-    }
+    if (!file) file = sd_bg.open("/bg.bin", O_READ);
+    if (!file) return;
 
-    size_t fileSize = file.size();
-    Serial.printf("[DISPLAY] File size: %d bytes\n", (int)fileSize);
-
-    if (fileSize < 115200) { 
-        Serial.println("[DISPLAY-ERR] File is too small (< 115200)!");
-        file.close(); 
-        return; 
-    }
+    if (file.size() < 115200) { file.close(); return; }
 
     if (bg_data_buffer != NULL) { 
-        Serial.println("[DISPLAY] Freeing old background buffer...");
         heap_caps_free(bg_data_buffer); 
         bg_data_buffer = NULL; 
     }
 
-    Serial.println("[DISPLAY] Allocating 115200 bytes in PSRAM...");
     bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     
     if (bg_data_buffer) {
         size_t totalRead = 0;
-        Serial.println("[DISPLAY] Reading chunks...");
         while (totalRead < 115200) {
             int r = file.read(bg_data_buffer + totalRead, 4096);
             if (r <= 0) break;
             totalRead += r;
         }
-        
-        Serial.printf("[DISPLAY] Total bytes read: %d\n", totalRead);
 
         if (totalRead >= 115200) {
-            Serial.println("[DISPLAY] Creating Image Descriptor & clearing Cache...");
             custom_bg.header.always_zero = 0;
             custom_bg.header.w = 240;
             custom_bg.header.h = 240;
@@ -134,12 +115,10 @@ void DisplayLogic::loadBackgroundFromSD() {
             
             lv_img_cache_invalidate_src(NULL);
             
-            Serial.println("[DISPLAY] Setting empty bg first...");
             lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
             lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
             lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
             
-            Serial.println("[DISPLAY] Applying new BG...");
             lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
             lv_obj_set_style_bg_opa(objects.main, 0, 0);
             lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
@@ -148,12 +127,7 @@ void DisplayLogic::loadBackgroundFromSD() {
             lv_obj_set_style_bg_opa(objects.stock, 0, 0);
             
             lv_obj_invalidate(objects.main);
-            Serial.println("[DISPLAY] loadBackgroundFromSD SUCCESS!");
-        } else {
-            Serial.println("[DISPLAY-ERR] Read size is less than 115200 bytes!");
         }
-    } else {
-        Serial.println("[DISPLAY-ERR] Failed to allocate memory for background!");
     }
     file.close();
 }
@@ -161,17 +135,12 @@ void DisplayLogic::loadBackgroundFromSD() {
 void DisplayLogic::loop() { lv_timer_handler(); }
 
 void DisplayLogic::buildMenu(const char* items[], int count) {
-    Serial.printf("[DISPLAY] buildMenu called. Count: %d\n", count);
     lv_obj_clean(objects.cont_menu_text); 
     currentMenuCount = count;
     
+    for(int i = 0; i < 30; i++) g_menuBtns[i] = NULL;
+    
     for(int i = 0; i < count; i++) {
-        // Bảo vệ mảng tĩnh menuButtons[15] trong thư viện
-        if (i >= 15) {
-            Serial.println("[DISPLAY-WARN] Exceeded maximum menu items (15). Stopping.");
-            break; 
-        }
-        
         lv_obj_t * btn = lv_btn_create(objects.cont_menu_text);
         lv_obj_set_size(btn, 220, 35); 
         lv_obj_set_style_bg_color(btn, lv_color_hex(0x222222), LV_PART_MAIN); 
@@ -186,7 +155,7 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
         lv_label_set_text(label, items[i]);
         lv_obj_center(label); 
         
-        menuButtons[i] = btn;
+        g_menuBtns[i] = btn;
     }
 }
 
@@ -229,7 +198,6 @@ void DisplayLogic::updateUI(RemoteState &state) {
         if (lv_scr_act() != objects.menu) lv_scr_load(objects.menu);
 
         if (state.currentMenu != lastMenuType) {
-            Serial.printf("[DISPLAY] Rebuilding menu layout for type: %d\n", state.currentMenu);
             if (state.currentMenu == MENU_MAIN) {
                 lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 7); 
             } 
@@ -240,7 +208,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 5);
             }
             else if (state.currentMenu == MENU_USB_MODE || state.currentMenu == MENU_OTA || state.currentMenu == MENU_SELECT_BG) {
-                const char* items[15]; 
+                const char* items[30]; 
                 int count = 0;
                 
                 if (state.currentMenu == MENU_USB_MODE) {
@@ -262,14 +230,13 @@ void DisplayLogic::updateUI(RemoteState &state) {
         }
 
         for (int i = 0; i < currentMenuCount; i++) {
-            if (i >= 15) break; 
-            if (menuButtons[i] == NULL) continue;
+            if (g_menuBtns[i] == NULL) continue;
             
             if (i == state.menuIndex) {
-                lv_obj_add_state(menuButtons[i], LV_STATE_CHECKED);
-                lv_obj_scroll_to_view(menuButtons[i], LV_ANIM_ON);
+                lv_obj_add_state(g_menuBtns[i], LV_STATE_CHECKED);
+                lv_obj_scroll_to_view(g_menuBtns[i], LV_ANIM_ON);
             } else {
-                lv_obj_clear_state(menuButtons[i], LV_STATE_CHECKED);
+                lv_obj_clear_state(g_menuBtns[i], LV_STATE_CHECKED);
             }
         }
     }

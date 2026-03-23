@@ -21,7 +21,6 @@ void guiTask(void *pvParameters) {
     display.begin();  
     isGuiReady = true; 
 
-    // Chờ SD card mount xong mới bắt đầu vẽ LVGL để tránh nghẽn cổ chai Bus SPI
     while (!isStorageReady) {
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -51,9 +50,8 @@ void inputTask(void *pvParameters) {
 }
 
 void appTask(void *pvParameters) {
-    // CÚ CHỐT CHỐNG RACE CONDITION: Ép Core 1 chờ tuyệt đối Core 0 khởi tạo xong SPI
     while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
-    vTaskDelay(pdMS_TO_TICKS(100)); // Nghỉ 100ms cho bus SPI xả hết tín hiệu rác từ màn hình
+    vTaskDelay(pdMS_TO_TICKS(100)); 
 
     if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
         storage.begin(); 
@@ -100,6 +98,8 @@ void espNowTask(void *pvParameters) {
 void setup() {
     sys.begin(); 
     Serial.begin(115200);
+
+    SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
 
     xGuiSemaphore = xSemaphoreCreateMutex();
     xEncoderQueue = xQueueCreate(10, sizeof(EncoderEvent));
