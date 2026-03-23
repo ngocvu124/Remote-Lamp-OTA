@@ -258,22 +258,59 @@ static void webTask(void* pvParameters) {
 
 bool WebServerLogic::runWiFiSetup() {
     if (WiFi.status() == WL_CONNECTED) return true;
+    
+    // Hiện thông báo đang thử kết nối
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+        display.showProgressPopup("WIFI", "Connecting to WiFi...", -1); 
+        xSemaphoreGive(xGuiSemaphore);
+    }
+
     WiFi.mode(WIFI_STA);
     WiFi.begin(); 
+    
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) return false;
+        // Nếu thoát menu giữa chừng thì dừng
+        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) {
+            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                display.closeProgressPopup();
+                xSemaphoreGive(xGuiSemaphore);
+            }
+            return false;
+        }
     }
-    if (WiFi.status() == WL_CONNECTED) return true;
+
+    if (WiFi.status() == WL_CONNECTED) {
+        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+            display.closeProgressPopup();
+            xSemaphoreGive(xGuiSemaphore);
+        }
+        return true;
+    }
+
+    // --- CÚ CHỐT: NẾU THẤT BẠI -> BẬT AP VÀ HIỆN HƯỚNG DẪN ---
     WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP("REMOTE_LAMP", ""); // Mật khẩu trống
+
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+        char msg[128];
+        sprintf(msg, "WiFi Connect Failed!\n\n1. Connect Phone to:\nSSID: REMOTE_LAMP\n2. Open: 192.168.4.1\nto setup WiFi.");
+        display.showProgressPopup("WIFI SETUP", msg, -1);
+        xSemaphoreGive(xGuiSemaphore);
+    }
+
     isRunning = true;
     xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
-    while (isRunning) vTaskDelay(pdMS_TO_TICKS(100));
+    
+    // Đợi cho đến khi người dùng cấu hình xong và kết nối thành công
+    while (isRunning && WiFi.status() != WL_CONNECTED) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
     return WiFi.status() == WL_CONNECTED;
 }
-
 void WebServerLogic::runBgUpload() {
     if (!runWiFiSetup()) return;
     String ip = WiFi.localIP().toString();
