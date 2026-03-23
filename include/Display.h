@@ -16,17 +16,15 @@ public:
     void updateUI(RemoteState &state);
     void setContrast(int level);
     void turnOff();
-    void showMessage(const char* msg);
     void showFileContent(const char* title, const char* content);
-    
     void showProgressPopup(const char* title, const char* msg, int percent);
     void closeProgressPopup();
-    
     void forceRebuild(); 
     void loadBackgroundFromSD(); 
-    
+
+    // CÁC HÀM XỬ LÝ PREVIEW ẢNH
     bool showImagePreview(FsFile& file);
-    void closeImagePreview(); // CÚ CHỐT: Hàm dọn dẹp RAM khi thoát xem ảnh
+    void closeImagePreview();
 
 private:
     static void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
@@ -35,7 +33,9 @@ private:
     
     int currentMenuCount = 0;
     MenuLevel lastMenuType = MENU_NONE;
-    lv_obj_t* menuButtons[15];
+    
+    // CÚ CHỐT: Tăng mảng chứa nút bấm lên 25 để chứa thoải mái danh sách file thẻ nhớ
+    lv_obj_t* menuButtons[25]; 
 };
 
 extern DisplayLogic display;

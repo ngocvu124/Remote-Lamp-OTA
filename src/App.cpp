@@ -78,7 +78,7 @@ void AppLogic::enterMenu(int level) {
     }
     else if (level == MENU_WEB_SERVER) {
         originalSleepTimeout = appState.sleepTimeout;
-        appState.sleepTimeout = 600; // Để 10 phút khỏi ngủ để rảnh tay xài Web
+        appState.sleepTimeout = 600; 
         webServer.runWebServerOnly();
         return;
     }
@@ -103,10 +103,13 @@ void AppLogic::exitMenu() {
 void AppLogic::handleEvents() {
     EncoderEvent ev;
     if (xQueueReceive(xEncoderQueue, &ev, 0) == pdPASS) {
+        bool needUpdateUI = false;
+
         if (ev == ENC_LONG_PRESS) {
             if (isViewingFile || isViewingImage) {
                 isViewingFile = false;
                 isViewingImage = false;
+                // Bọc khóa an toàn
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                     display.showFileContent(NULL, NULL);
                     display.closeImagePreview();
@@ -117,28 +120,38 @@ void AppLogic::handleEvents() {
             }
             else if (appState.currentMenu != MENU_NONE) exitMenu();
             else enterMenu(MENU_MAIN);
-            display.updateUI(appState);
-            return;
+            needUpdateUI = true;
         }
-
-        if (appState.currentMenu == MENU_NONE) {
+        else if (appState.currentMenu == MENU_NONE) {
             if (ev == ENC_UP || ev == ENC_DOWN) {
                 int val = encoder.getEncoderValue();
                 if (appState.isTempMode) appState.temperature = val;
                 else appState.brightness = val;
                 espNow.send(appState.isTempMode ? 1 : 0, appState.brightness, appState.temperature, 0);
-                display.updateUI(appState);
+                needUpdateUI = true;
             }
             else if (ev == ENC_CLICK) {
                 appState.isTempMode = !appState.isTempMode;
                 encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
-                display.updateUI(appState);
+                needUpdateUI = true;
             }
         }
         else {
             if (isViewingFile) {
-                if (ev == ENC_UP) display.showFileContent("SCROLL_UP", NULL);
-                else if (ev == ENC_DOWN) display.showFileContent("SCROLL_DOWN", NULL);
+                if (ev == ENC_UP) {
+                    // Bọc khóa an toàn
+                    if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) { 
+                        display.showFileContent("SCROLL_UP", NULL); 
+                        xSemaphoreGive(xGuiSemaphore); 
+                    }
+                }
+                else if (ev == ENC_DOWN) {
+                    // Bọc khóa an toàn
+                    if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) { 
+                        display.showFileContent("SCROLL_DOWN", NULL); 
+                        xSemaphoreGive(xGuiSemaphore); 
+                    }
+                }
                 return;
             }
 
@@ -149,11 +162,13 @@ void AppLogic::handleEvents() {
                     appState.sleepTimeout = 30 + (v * (300 - 30) / 1000);
                 } else if (appState.currentMenu == MENU_SET_BACKLIGHT) {
                     appState.oledBrightness = encoder.getEncoderValue() / 10;
+                    
+                    // Lệnh setContrast gọi thẳng vào driver, không cần LVGL, an toàn
                     display.setContrast(appState.oledBrightness);
                 } else {
                     appState.menuIndex = encoder.getEncoderValue();
                 }
-                display.updateUI(appState);
+                needUpdateUI = true;
             }
             else if (ev == ENC_CLICK) {
                 if (appState.currentMenu == MENU_MAIN) {
@@ -193,6 +208,7 @@ void AppLogic::handleEvents() {
                     if (appState.menuIndex == storage.fileCount) enterMenu(MENU_CONTROL);
                     else {
                         char* selectedFile = storage.fileNames[appState.menuIndex];
+                        // Bọc khóa an toàn LVGL khi load lại ảnh mới
                         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                             FsFile activeFile = sd_bg.open("/active_bg.txt", O_WRITE | O_CREAT | O_TRUNC);
                             if (activeFile) {
@@ -217,6 +233,7 @@ void AppLogic::handleEvents() {
                     else {
                         char* fName = storage.fileNames[appState.menuIndex];
                         if (String(fName).endsWith(".bin") || String(fName).endsWith(".BIN")) {
+                            // Bọc khóa an toàn
                             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 FsFile f = sd_bg.open(fName, O_READ);
                                 if(display.showImagePreview(f)) {
@@ -228,6 +245,7 @@ void AppLogic::handleEvents() {
                             }
                         } else {
                             char* content = storage.readFileToPSRAM(fName);
+                            // Bọc khóa an toàn
                             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent(fName, content);
                                 xSemaphoreGive(xGuiSemaphore);
@@ -245,7 +263,15 @@ void AppLogic::handleEvents() {
                         xTaskCreatePinnedToCore(otaUpdateTask, "OtaTask", 8192, NULL, 1, &otaTaskHandle, 1);
                     }
                 }
+                needUpdateUI = true;
+            }
+        }
+
+        // CÚ CHỐT: Chỉ gọi duy nhất 1 lần UpdateUI ở cuối luồng, và ĐƯỢC BỌC KHÓA AN TOÀN
+        if (needUpdateUI) {
+            if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
                 display.updateUI(appState);
+                xSemaphoreGive(xGuiSemaphore);
             }
         }
     }

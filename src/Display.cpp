@@ -257,8 +257,6 @@ void DisplayLogic::turnOff() {
     tft.enableDisplay(false);
 }
 
-void DisplayLogic::showMessage(const char* msg) {}
-
 static lv_obj_t * file_overlay = NULL;
 static char* current_file_buffer = NULL;
 
