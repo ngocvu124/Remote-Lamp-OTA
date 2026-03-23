@@ -17,12 +17,10 @@ QueueHandle_t xEspNowQueue = NULL;
 volatile bool isGuiReady = false; 
 volatile bool isStorageReady = false;
 
-// --- KHAI BÁO CẤU TRÚC STATIC TASK ---
+// Cấu trúc quản lý Static Task
 StaticTask_t guiTaskBuf, inputTaskBuf, appTaskBuf, batTaskBuf, nowTaskBuf;
 
-// ==========================================
-// CÁC HÀM TASK (GIỮ NGUYÊN LOGIC CỦA BẠN)
-// ==========================================
+// --- CÁC HÀM TASK ---
 void guiTask(void *pvParameters) {
     display.begin();  
     isGuiReady = true; 
@@ -103,48 +101,51 @@ void setup() {
     Serial.begin(115200);
     delay(1500); 
     
-    Serial.println("\n--- REMOTE LAMP STARTING (PSRAM OPTIMIZED) ---");
+    Serial.println("\n--- REMOTE LAMP STARTING (STABLE MODE) ---");
 
     if (!psramInit()) {
-        Serial.println("[ERROR] PSRAM not found!");
+        Serial.println("[ERROR] PSRAM NOT FOUND!");
     } else {
-        Serial.printf("[OK] PSRAM Detected: %d KB\n", ESP.getPsramSize() / 1024);
-        Serial.printf("[OK] PSRAM Free: %d KB\n", ESP.getFreePsram() / 1024);
+        Serial.printf("[OK] PSRAM Size: %d KB\n", ESP.getPsramSize() / 1024);
     }
 
     xGuiSemaphore = xSemaphoreCreateMutex();
     xEncoderQueue = xQueueCreate(10, sizeof(EncoderEvent));
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 
 
-    // Cú chốt: Hàm cấp phát an toàn
-    auto safeAlloc = [](size_t size, const char* name) -> StackType_t* {
-        // Thử PSRAM trước
-        StackType_t* p = (StackType_t*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    // HÀM CẤP PHÁT AN TOÀN TUYỆT ĐỐI
+    auto safeAlloc = [](size_t size, const char* name, bool forceInternal) -> StackType_t* {
+        StackType_t* p = NULL;
+        if (!forceInternal) {
+            p = (StackType_t*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        }
         if (p) {
             Serial.printf("[MEM] %s: PSRAM OK\n", name);
-            return p;
+        } else {
+            p = (StackType_t*)heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            Serial.printf("[MEM] %s: Internal RAM\n", name);
         }
-        // Nếu hụt PSRAM hoặc chưa bật flag, quay về RAM nội
-        p = (StackType_t*)heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        if (p) Serial.printf("[MEM] %s: Internal RAM (Fallback)\n", name);
         return p;
     };
 
-    StackType_t *s1 = safeAlloc(STACK_GUI, "Gui");
-    StackType_t *s2 = safeAlloc(4096, "Input");
-    StackType_t *s3 = safeAlloc(STACK_SYSTEM, "App");
-    StackType_t *s4 = safeAlloc(8192, "EspNow");
-    StackType_t *s5 = safeAlloc(4096, "Bat");
+    // Đẩy GUI và APP (nặng nhất) vào PSRAM. Input và Now (nhạy cảm) để RAM nội.
+    StackType_t *sGui  = safeAlloc(STACK_GUI, "Gui", false);
+    StackType_t *sInp  = safeAlloc(4096, "Input", true); // Ép RAM nội cho mượt
+    StackType_t *sApp  = safeAlloc(STACK_SYSTEM, "App", false);
+    StackType_t *sNow  = safeAlloc(8192, "EspNow", true); // Ép RAM nội tránh delay
+    StackType_t *sBat  = safeAlloc(4096, "Bat", false);
 
-    if (s1 && s2 && s3 && s4 && s5) {
-        xTaskCreateStaticPinnedToCore(guiTask, "GuiTask", STACK_GUI, NULL, PRIO_GUI, s1, &guiTaskBuf, 0);
-        xTaskCreateStaticPinnedToCore(inputTask, "InputTask", 4096, NULL, PRIO_INPUT, s2, &inputTaskBuf, 1);
-        xTaskCreateStaticPinnedToCore(appTask, "AppTask", STACK_SYSTEM, NULL, PRIO_SYSTEM, s3, &appTaskBuf, 1);
-        xTaskCreateStaticPinnedToCore(espNowTask, "EspTask", 8192, NULL, PRIO_SYSTEM + 1, s4, &nowTaskBuf, 1);
-        xTaskCreateStaticPinnedToCore(batteryTask, "BatTask", 4096, NULL, 1, s5, &batTaskBuf, 1); 
-        Serial.println("[SYSTEM] All Tasks Started.");
+    if (sGui && sInp && sApp && sNow && sBat) {
+        // Tạo task - Nếu vẫn assert lỗi PSRAM, FreeRTOS sẽ tự hiểu nhờ flag ở platformio.ini
+        xTaskCreateStaticPinnedToCore(guiTask, "GuiTask", STACK_GUI, NULL, PRIO_GUI, sGui, &guiTaskBuf, 0);
+        xTaskCreateStaticPinnedToCore(inputTask, "InputTask", 4096, NULL, PRIO_INPUT, sInp, &inputTaskBuf, 1);
+        xTaskCreateStaticPinnedToCore(appTask, "AppTask", STACK_SYSTEM, NULL, PRIO_SYSTEM, sApp, &appTaskBuf, 1);
+        xTaskCreateStaticPinnedToCore(espNowTask, "EspTask", 8192, NULL, PRIO_SYSTEM + 1, sNow, &nowTaskBuf, 1);
+        xTaskCreateStaticPinnedToCore(batteryTask, "BatTask", 4096, NULL, 1, sBat, &batTaskBuf, 1); 
+        Serial.println("[SYSTEM] All Static Tasks Started Successfully.");
     } else {
-        Serial.println("[CRITICAL] Memory fail!");
+        Serial.println("[CRITICAL] Memory allocation failed!");
+        while(1) delay(1000);
     }
 }
 
