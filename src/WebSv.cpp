@@ -68,9 +68,13 @@ static void webTask(void* pvParameters) {
 
         server->on("/upload", HTTP_POST, [server]() {
             server->send(200, "text/plain", "OK");
-            Serial.println("[WEB] Upload Finished. Rebooting...");
-            vTaskDelay(pdMS_TO_TICKS(1000));
-            ESP.restart(); 
+            Serial.println("[WEB] Upload Finished. Applying new background...");
+            
+            // CÚ CHỐT 1: Không khởi động lại ESP nữa, tự động reload lại hình nền ngay lập tức
+            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                display.loadBackgroundFromSD();
+                xSemaphoreGive(xGuiSemaphore);
+            }
         }, [server]() {
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
@@ -116,12 +120,10 @@ static void webTask(void* pvParameters) {
             } else server->send(500, "text/plain", "SD busy");
         });
 
-
         // ==========================================================
-        // --- TÍNH NĂNG MỚI: QUẢN LÝ FILE TRÊN TRÌNH DUYỆT ---
+        // --- TÍNH NĂNG QUẢN LÝ FILE TRÊN TRÌNH DUYỆT ---
         // ==========================================================
 
-        // 1. Trả về giao diện Web HTML từ file trong LittleFS
         server->on("/files", HTTP_GET, [server]() {
             File file = LittleFS.open("/files.html", "r");
             if (!file) { 
@@ -132,7 +134,6 @@ static void webTask(void* pvParameters) {
             file.close();
         });
 
-        // 2. Trả về danh sách file định dạng JSON
         server->on("/list", HTTP_GET, [server]() {
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 String json = "[";
@@ -144,7 +145,6 @@ static void webTask(void* pvParameters) {
                     while (file.openNext(&dir, O_READ)) {
                         char name[64];
                         file.getName(name, sizeof(name));
-                        // Ẩn thư mục System Volume Information rác của Windows nếu có
                         if (String(name) != "System Volume Information") {
                             if (!first) json += ",";
                             json += "{\"name\":\"" + String(name) + "\",\"size\":" + String(file.size()) + "}";
@@ -162,7 +162,6 @@ static void webTask(void* pvParameters) {
             }
         });
 
-        // 3. API Xóa File
         server->on("/delete", HTTP_POST, [server]() {
             String filename = server->arg("filename");
             if (!filename.startsWith("/")) filename = "/" + filename;
@@ -183,7 +182,6 @@ static void webTask(void* pvParameters) {
             }
         });
 
-        // 4. API Tải file vè PC theo tên (Hỗ trợ chống lệch byte bằng setContentLength)
         server->on("/download_file", HTTP_GET, [server]() {
             String filename = server->arg("filename");
             if (!filename.startsWith("/")) filename = "/" + filename;
@@ -213,9 +211,8 @@ static void webTask(void* pvParameters) {
             }
         });
 
-        // 5. API Upload File động (Bất kỳ tên gì, bất kỳ loại file nào)
         server->on("/upload_file", HTTP_POST, [server]() {
-            server->send(200, "text/plain", "OK"); // Hoàn tất thì báo OK (Không Reboot)
+            server->send(200, "text/plain", "OK"); 
         }, [server]() {
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
@@ -225,7 +222,7 @@ static void webTask(void* pvParameters) {
                 Serial.printf("[WEB] Starting General Upload: %s\n", filename.c_str());
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
-                    if (sd_bg.exists(filename.c_str())) sd_bg.remove(filename.c_str()); // Dọn dẹp thẻ nhớ
+                    if (sd_bg.exists(filename.c_str())) sd_bg.remove(filename.c_str()); 
                     uploadFile = sd_bg.open(filename.c_str(), O_WRITE | O_CREAT | O_TRUNC);
                     xSemaphoreGive(xGuiSemaphore);
                 }
@@ -255,6 +252,13 @@ static void webTask(void* pvParameters) {
     }
     server->stop();
     delete server; 
+
+    // CÚ CHỐT 2: Tự động dọn dẹp sạch sẽ khung Popup thông báo IP trên màn hình khi Task kết thúc
+    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+        display.closeProgressPopup();
+        xSemaphoreGive(xGuiSemaphore);
+    }
+
     vTaskDelete(NULL); 
 }
 
@@ -280,7 +284,6 @@ void WebServerLogic::runBgUpload() {
     if (!runWiFiSetup()) return;
     String ip = WiFi.localIP().toString();
     
-    // Cập nhật câu thông báo UI trên màn hình cho bá cháy
     char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
     sprintf(msg_buf, "1. Up BG: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str());
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {

@@ -3,50 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 BG Tool</title>
+    <title>Dashboard | Remote Lamp</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #222; color: #fff; margin: 0; padding: 20px; }
-        .canvas-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 15px; }
-        canvas { border: 2px solid #ff7200; border-radius: 8px; max-width: 100%; box-shadow: 0px 4px 10px rgba(0,0,0,0.5); }
-        .label-tag { font-size: 12px; margin-bottom: 5px; color: #aaa; text-transform: uppercase; }
-        .button-group { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 20px; }
-        .btn { border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; max-width: 280px; transition: 0.3s; }
-        .btn-upload { background: #ff7200; color: #fff; }
-        .btn-download { background: #444; color: #00ff00; border: 1px solid #00ff00; }
-        .btn-sd { background: #444; color: #00e5ff; border: 1px solid #00e5ff; }
-        .btn:disabled { background: #555 !important; color: #888 !important; cursor: not-allowed; border-color: #777 !important; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar */
+        .sidebar { width: 260px; background-color: #1e293b; display: flex; flex-direction: column; border-right: 1px solid #334155; }
+        .sidebar-header { padding: 25px 20px; font-size: 1.5rem; font-weight: 800; color: #f97316; border-bottom: 1px solid #334155; text-align: center; letter-spacing: 1px; }
+        .nav-menu { flex: 1; padding: 20px 15px; display: flex; flex-direction: column; gap: 12px; }
+        .nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #cbd5e1; text-decoration: none; border-radius: 10px; transition: all 0.3s ease; font-weight: 600; font-size: 15px; }
+        .nav-link:hover { background-color: #334155; color: #fff; transform: translateX(5px); }
+        .nav-link.active { background-color: #f97316; color: #fff; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); transform: none; }
+        .github-link { margin-top: auto; background-color: #0f172a; border: 1px solid #334155; color: #38bdf8; }
+        .github-link:hover { background-color: #38bdf8; color: #0f172a; }
+
+        /* Main Content */
+        .main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+        .header { background-color: #1e293b; padding: 20px 30px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .header h2 { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
+        #status { font-weight: 600; padding: 6px 15px; border-radius: 20px; background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 14px; }
+        
+        .content { padding: 30px; max-width: 900px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; align-items: center; }
+        .upload-card { background: #1e293b; border: 1px dashed #475569; padding: 30px; border-radius: 16px; width: 100%; text-align: center; margin-bottom: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
+        .upload-label { display: inline-block; background: #f97316; color: white; padding: 12px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .upload-label:hover { background: #ea580c; transform: translateY(-2px); }
         input[type="file"] { display: none; }
-        .upload-label { display: inline-block; background: #333; padding: 12px 24px; border-radius: 6px; cursor: pointer; border: 2px dashed #777; margin-bottom: 10px; }
-        #status { margin-top: 15px; font-weight: bold; font-size: 14px; min-height: 20px; color: #aaa; }
+
+        .canvas-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; width: 100%; }
+        .canvas-box { display: flex; flex-direction: column; align-items: center; }
+        .label-tag { font-size: 13px; margin-bottom: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        canvas { border: 4px solid #334155; border-radius: 12px; max-width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+
+        .button-group { display: flex; justify-content: center; gap: 15px; margin-top: 40px; width: 100%; flex-wrap: wrap; }
+        .btn { border: none; padding: 14px 24px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 8px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+        .btn-upload { background: #f97316; color: #fff; box-shadow: 0 4px 10px rgba(249,115,22,0.3); }
+        .btn-upload:hover:not(:disabled) { background: #ea580c; transform: translateY(-2px); }
+        .btn-download { background: #1e293b; color: #10b981; border: 2px solid #10b981; }
+        .btn-download:hover:not(:disabled) { background: #10b981; color: #1e293b; }
+        .btn-sd { background: #1e293b; color: #38bdf8; border: 2px solid #38bdf8; }
+        .btn-sd:hover { background: #38bdf8; color: #1e293b; }
+
+        /* Footer */
+        .footer { padding: 20px; text-align: center; color: #64748b; font-size: 0.85rem; border-top: 1px solid #334155; margin-top: auto; }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #334155; }
+            .nav-menu { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 10px; gap: 8px;}
+            .nav-link { padding: 10px 15px; font-size: 13px; }
+            .content { padding: 15px; }
+            .canvas-container { gap: 20px; }
+        }
     </style>
 </head>
 <body>
-    <h2>CÔNG CỤ HÌNH NỀN ESP32</h2>
-    <label class="upload-label">
-        <input type="file" id="fileInput" accept="image/jpeg, image/png">
-        📸 CHỌN ẢNH TỪ MÁY
-    </label>
-    <div class="canvas-container">
-        <div class="canvas-box">
-            <span class="label-tag">1. Ảnh Gốc (Crop)</span>
-            <canvas id="canvas" width="240" height="240"></canvas>
+    <aside class="sidebar">
+        <div class="sidebar-header">💡 Remote Lamp</div>
+        <nav class="nav-menu">
+            <a href="/" class="nav-link active">🖼️ Đổi Hình Nền</a>
+            <a href="/files" class="nav-link">🗂️ Quản Lý File</a>
+            <a href="#" class="nav-link" onclick="alert('Chức năng này chỉ khả dụng khi thiết bị đang ở chế độ Menu Cài Đặt WiFi.')">⚙️ Cài Đặt WiFi</a>
+            <a href="https://github.com/ngocvu124/Remote-Lamp-OTA" target="_blank" class="nav-link github-link">💻 GitHub Project</a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <header class="header">
+            <h2>Thiết Lập Hình Nền (Background)</h2>
+            <div id="status">Sẵn sàng</div>
+        </header>
+        
+        <div class="content">
+            <div class="upload-card">
+                <label class="upload-label">
+                    <input type="file" id="fileInput" accept="image/jpeg, image/png">
+                    📸 CHỌN ẢNH TỪ MÁY TÍNH / ĐIỆN THOẠI
+                </label>
+                <p style="margin-top: 15px; color: #64748b; font-size: 13px;">Hệ thống sẽ tự động crop trung tâm và xử lý về kích thước 240x240 chuẩn ESP32.</p>
+            </div>
+
+            <div class="canvas-container">
+                <div class="canvas-box">
+                    <span class="label-tag">1. Ảnh Gốc Đã Crop</span>
+                    <canvas id="canvas" width="240" height="240"></canvas>
+                </div>
+                <div class="canvas-box">
+                    <span class="label-tag">2. Bản Xem Trước (Rendered)</span>
+                    <canvas id="binPreview" width="240" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="uploadBtn" class="btn btn-upload" disabled>🚀 TẢI LÊN MÀN HÌNH</button>
+                <button id="dlLocalBtn" class="btn btn-download" disabled>📥 LƯU BIN VỀ MÁY</button>
+                <button onclick="window.location.href='/download'" class="btn btn-sd">💾 TẢI ẢNH TỪ THẺ SD</button>
+            </div>
         </div>
-        <div class="canvas-box">
-            <span class="label-tag">2. BIN Preview (Little Endian)</span>
-            <canvas id="binPreview" width="240" height="240"></canvas>
-        </div>
-    </div>
-    <div id="status">Sẵn sàng.</div>
-    <div class="button-group">
-        <button id="uploadBtn" class="btn btn-upload" disabled>🚀 TẢI LÊN MÀN HÌNH (SD)</button>
-        <button id="dlLocalBtn" class="btn btn-download" disabled>📥 TẢI BIN MỚI (VỀ PC)</button>
-        <button onclick="window.location.href='/download'" class="btn btn-sd">💾 TẢI ẢNH TRÊN THẺ (SD)</button>
-    </div>
+
+        <footer class="footer">
+            &copy; 2026 Remote Lamp Project by Vũ. All rights reserved.
+        </footer>
+    </main>
+
     <script>
         const fileInput = document.getElementById('fileInput'), canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d'),
               binPreview = document.getElementById('binPreview'), btx = binPreview.getContext('2d'), 
               uploadBtn = document.getElementById('uploadBtn'), dlLocalBtn = document.getElementById('dlLocalBtn'), statusDiv = document.getElementById('status');
         let rgb565Data = null;
+
+        function setStatus(msg, color, bg) {
+            statusDiv.innerText = msg;
+            statusDiv.style.color = color;
+            statusDiv.style.background = bg;
+        }
 
         fileInput.addEventListener('change', function(e) {
             const file = e.target.files[0]; if (!file) return;
@@ -63,14 +134,13 @@
                     for (let i = 0; i < imgData.length; i += 4) {
                         const r = imgData[i] >> 3, g = imgData[i+1] >> 2, b = imgData[i+2] >> 3;
                         const rgb565 = (r << 11) | (g << 5) | b;
-                        // Lưu Little Endian: Byte thấp trước, Byte cao sau. Chuẩn bài cho ESP32.
-                        rgb565Data[j++] = rgb565 & 0xFF;        // Low byte
-                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF; // High byte
+                        // MÃ HÓA LITTLE ENDIAN
+                        rgb565Data[j++] = rgb565 & 0xFF;        
+                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF; 
                     }
                     renderPreview();
                     uploadBtn.disabled = dlLocalBtn.disabled = false;
-                    statusDiv.innerText = 'Đã xử lý xong định dạng Little Endian!';
-                    statusDiv.style.color = '#00ff00';
+                    setStatus('Đã xử lý ảnh thành công!', '#10b981', 'rgba(16, 185, 129, 0.1)');
                 };
                 img.src = event.target.result;
             };
@@ -80,7 +150,6 @@
         function renderPreview() {
             const imgData = btx.createImageData(240, 240);
             for (let i = 0; i < 240 * 240; i++) {
-                // Trình duyệt web đọc ngược lại Little Endian để preview cho bác xem
                 const low = rgb565Data[i * 2], high = rgb565Data[i * 2 + 1];
                 const val = (high << 8) | low;
                 const r = (val >> 11) & 0x1F, g = (val >> 5) & 0x3F, b = val & 0x1F;
@@ -98,10 +167,11 @@
         };
 
         uploadBtn.onclick = () => {
-            uploadBtn.disabled = true; statusDiv.innerText = 'Đang gửi...';
+            uploadBtn.disabled = true; 
+            setStatus('Đang gửi dữ liệu...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
             const formData = new FormData(); 
             formData.append('bg', new Blob([rgb565Data], { type: 'application/octet-stream' }), 'bg.bin');
-            fetch('/upload', { method: 'POST', body: formData }).then(res => res.ok ? location.reload() : alert('Lỗi!'));
+            fetch('/upload', { method: 'POST', body: formData }).then(res => res.ok ? location.reload() : alert('Lỗi tải lên!'));
         };
     </script>
 </body>

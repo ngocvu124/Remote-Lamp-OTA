@@ -2,22 +2,80 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Cấu Hình WiFi</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cài Đặt WiFi | Remote Lamp</title>
     <style>
-        body { font-family: sans-serif; text-align: center; margin-top: 50px; background: #222; color: #fff; }
-        select, input { padding: 12px; margin: 8px; width: 80%; max-width: 300px; border-radius: 6px; border: none; font-size: 16px; }
-        .btn { background: #ff7200; color: #fff; font-weight: bold; cursor: pointer; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
+        
+        .sidebar { width: 260px; background-color: #1e293b; display: flex; flex-direction: column; border-right: 1px solid #334155; }
+        .sidebar-header { padding: 25px 20px; font-size: 1.5rem; font-weight: 800; color: #f97316; border-bottom: 1px solid #334155; text-align: center; letter-spacing: 1px; }
+        .nav-menu { flex: 1; padding: 20px 15px; display: flex; flex-direction: column; gap: 12px; }
+        .nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #cbd5e1; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 15px; }
+        .nav-link.disabled { opacity: 0.5; cursor: not-allowed; }
+        .nav-link.active { background-color: #f97316; color: #fff; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); }
+
+        .main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+        .header { background-color: #1e293b; padding: 20px 30px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .header h2 { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
+        #status { font-weight: 600; padding: 6px 15px; border-radius: 20px; background: rgba(249, 115, 22, 0.1); color: #f97316; font-size: 14px; }
+
+        .content { padding: 30px; display: flex; justify-content: center; align-items: center; flex: 1; }
+        .wifi-card { background: #1e293b; border: 1px solid #334155; padding: 40px; border-radius: 16px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.4); }
+        .wifi-icon { font-size: 4rem; margin-bottom: 20px; }
+        
+        select, input { width: 100%; padding: 14px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 15px; outline: none; transition: 0.3s; }
+        select:focus, input:focus { border-color: #f97316; box-shadow: 0 0 0 3px rgba(249,115,22,0.2); }
+        
+        .btn-connect { background: #f97316; color: #fff; border: none; padding: 15px; width: 100%; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(249,115,22,0.3); }
+        .btn-connect:hover { background: #ea580c; transform: translateY(-2px); }
+
+        .footer { padding: 20px; text-align: center; color: #64748b; font-size: 0.85rem; border-top: 1px solid #334155; margin-top: auto; }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .sidebar { display: none; /* Ẩn sidebar trên mobile cho gọn trong chế độ WiFi config */ }
+            .wifi-card { padding: 30px 20px; border: none; background: transparent; box-shadow: none; }
+        }
     </style>
 </head>
 <body>
-    <h2>CHỌN WIFI NHÀ BÁC</h2>
-    <form action="/save">
-        <select name="ssid" required>
-            {{OPTIONS}}
-        </select><br>
-        <input type="password" name="pass" placeholder="Mật khẩu WiFi (Nếu có)"><br>
-        <input type="submit" class="btn" value="KẾT NỐI NGAY">
-    </form>
+    <aside class="sidebar">
+        <div class="sidebar-header">💡 Remote Lamp</div>
+        <nav class="nav-menu">
+            <a href="#" class="nav-link disabled">🖼️ Đổi Hình Nền</a>
+            <a href="#" class="nav-link disabled">🗂️ Quản Lý File</a>
+            <a href="#" class="nav-link active">⚙️ Cài Đặt WiFi</a>
+            <a href="https://github.com/ngocvu124/Remote-Lamp-OTA" target="_blank" class="nav-link" style="margin-top: auto; border: 1px solid #334155; color: #38bdf8;">💻 GitHub Project</a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <header class="header">
+            <h2>Thiết Lập Mạng</h2>
+            <div id="status">Chế độ Access Point</div>
+        </header>
+        
+        <div class="content">
+            <div class="wifi-card">
+                <div class="wifi-icon">📡</div>
+                <h3 style="margin-bottom: 10px; color: #e2e8f0;">Kết nối Thiết Bị</h3>
+                <p style="margin-bottom: 30px; color: #94a3b8; font-size: 14px;">Chọn mạng WiFi nhà bạn để Remote Lamp có thể truy cập Internet và cập nhật chứng khoán.</p>
+                
+                <form action="/save">
+                    <select name="ssid" required>
+                        <option value="" disabled selected>-- Danh sách WiFi quét được --</option>
+                        {{OPTIONS}}
+                    </select>
+                    <input type="password" name="pass" placeholder="Mật khẩu WiFi (bỏ trống nếu mạng mở)">
+                    <button type="submit" class="btn-connect" onclick="this.innerHTML='Đang Kết Nối...'">🚀 Bắt Đầu Kết Nối</button>
+                </form>
+            </div>
+        </div>
+
+        <footer class="footer">
+            &copy; 2026 Remote Lamp Project by Vũ. All rights reserved.
+        </footer>
+    </main>
 </body>
 </html>
