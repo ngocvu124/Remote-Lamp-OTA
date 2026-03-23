@@ -60,7 +60,6 @@ static void webTask(void* pvParameters) {
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/upload.html", "r");
             if (!file) { server->send(500, "text/plain", "Missing upload.html"); return; }
-            // streamFile hoạt động bình thường với LittleFS
             server->streamFile(file, "text/html"); 
             file.close();
         });
@@ -107,13 +106,11 @@ static void webTask(void* pvParameters) {
                     server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
                     server->sendHeader("Connection", "close");
                     
-                    // CÚ CHỐT: Gắn chặt Content-Length để dập tắt chế độ chunked rác của ESP32
+                    // Khóa dung lượng file để chống chèn rác
                     server->setContentLength(file.size());
-                    
-                    // Gửi đi header
                     server->send(200, "application/octet-stream", ""); 
 
-                    // Tự tay bơm từng byte từ SdFat ra trình duyệt
+                    // Bơm dữ liệu
                     uint8_t buffer[1024];
                     int bytesRead;
                     while (1) {

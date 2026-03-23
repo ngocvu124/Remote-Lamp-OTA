@@ -32,7 +32,7 @@
             <canvas id="canvas" width="240" height="240"></canvas>
         </div>
         <div class="canvas-box">
-            <span class="label-tag">2. BIN Preview (Big Endian)</span>
+            <span class="label-tag">2. BIN Preview</span>
             <canvas id="binPreview" width="240" height="240"></canvas>
         </div>
     </div>
@@ -63,13 +63,13 @@
                     for (let i = 0; i < imgData.length; i += 4) {
                         const r = imgData[i] >> 3, g = imgData[i+1] >> 2, b = imgData[i+2] >> 3;
                         const rgb565 = (r << 11) | (g << 5) | b;
-                        // CÚ CHỐT: Lưu Big Endian (Byte cao chứa Red/Green đứng trước)
-                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF;
-                        rgb565Data[j++] = rgb565 & 0xFF;
+                        // Lưu chuẩn Big-Endian để PC đọc đúng màu
+                        rgb565Data[j++] = (rgb565 >> 8) & 0xFF; // High byte
+                        rgb565Data[j++] = rgb565 & 0xFF;        // Low byte
                     }
                     renderPreview();
                     uploadBtn.disabled = dlLocalBtn.disabled = false;
-                    statusDiv.innerText = 'Đã chuyển đổi sang Big Endian!';
+                    statusDiv.innerText = 'Đã xử lý ảnh thành công!';
                     statusDiv.style.color = '#00ff00';
                 };
                 img.src = event.target.result;
@@ -93,12 +93,13 @@
 
         dlLocalBtn.onclick = () => {
             const blob = new Blob([rgb565Data], { type: 'application/octet-stream' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bg_be.bin'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'bg.bin'; a.click();
         };
 
         uploadBtn.onclick = () => {
             uploadBtn.disabled = true; statusDiv.innerText = 'Đang gửi...';
-            const formData = new FormData(); formData.append('bg', new Blob([rgb565Data]), 'bg.bin');
+            const formData = new FormData(); 
+            formData.append('bg', new Blob([rgb565Data], { type: 'application/octet-stream' }), 'bg.bin');
             fetch('/upload', { method: 'POST', body: formData }).then(res => res.ok ? location.reload() : alert('Lỗi!'));
         };
     </script>
