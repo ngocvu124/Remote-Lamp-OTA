@@ -41,9 +41,8 @@ void StorageLogic::loadFiles() {
         if (!file) break;
         if (!file.isDirectory()) {
             file.getName(fileNames[fileCount], 32);
-            if (String(fileNames[fileCount]) != "config.json" && String(fileNames[fileCount]) != "bg.bin") {
-                fileCount++;
-            }
+            // ĐÃ GỠ BỎ ĐIỀU KIỆN GIẤU FILE: Cho phép hiện cả config.json và bg.bin trong SD Explorer
+            fileCount++;
         }
         file.close();
     }
