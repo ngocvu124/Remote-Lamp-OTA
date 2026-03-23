@@ -20,6 +20,9 @@ static uint8_t* preview_data_buffer = NULL;
 static lv_img_dsc_t preview_img_dsc;        
 static lv_obj_t* preview_img_obj = NULL;    
 
+// [KHÔI PHỤC]: Khai báo mảng chứa chính xác nút bấm, tránh LVGL nhầm sang Scrollbar
+static lv_obj_t* menuButtons[30]; 
+
 #define BACKLIGHT_CHANNEL 0 
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
@@ -88,12 +91,16 @@ void DisplayLogic::loadBackgroundFromSD() {
 
     if (file.size() < 115200) { file.close(); return; }
 
-    if (bg_data_buffer != NULL) { heap_caps_free(bg_data_buffer); bg_data_buffer = NULL; }
+    // [FIX LỖI BG ĐEN]: Ép giải phóng bộ nhớ cũ và cấp phát lại để đổi Memory Pointer
+    // Điều này lừa cơ chế Cache của LVGL, bắt nó vẽ lại thay vì tối ưu hóa bỏ qua.
+    if (bg_data_buffer != NULL) { 
+        heap_caps_free(bg_data_buffer); 
+        bg_data_buffer = NULL; 
+    }
 
     bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     
     if (bg_data_buffer) {
-        // [FIX LỖI BG ĐEN]: Gom byte bằng vòng lặp để đảm bảo lấy đủ dữ liệu dù SPI bị trễ
         size_t totalRead = 0;
         while (totalRead < 115200) {
             int r = file.read(bg_data_buffer + totalRead, 4096);
@@ -109,7 +116,6 @@ void DisplayLogic::loadBackgroundFromSD() {
             custom_bg.data_size = 115200;
             custom_bg.data = bg_data_buffer;
             
-            // Ép LVGL xóa bộ nhớ đệm (Cache) để vẽ lại khung nền mới thay vì load khung rỗng/đen
             lv_img_cache_invalidate_src(NULL);
             
             lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
@@ -118,6 +124,11 @@ void DisplayLogic::loadBackgroundFromSD() {
             lv_obj_set_style_bg_opa(objects.menu, 0, 0);
             lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
             lv_obj_set_style_bg_opa(objects.stock, 0, 0);
+            
+            // ÉP REDRAW MÀN HÌNH MẠNH TAY
+            lv_obj_invalidate(objects.main);
+            lv_obj_invalidate(objects.menu);
+            lv_obj_invalidate(objects.stock);
         }
     }
     file.close();
@@ -128,6 +139,10 @@ void DisplayLogic::loop() { lv_timer_handler(); }
 void DisplayLogic::buildMenu(const char* items[], int count) {
     lv_obj_clean(objects.cont_menu_text); 
     currentMenuCount = count;
+    
+    // Đảm bảo xóa mảng cũ để không còn rác bộ nhớ
+    for(int i = 0; i < 30; i++) menuButtons[i] = NULL;
+    
     for(int i = 0; i < count; i++) {
         lv_obj_t * btn = lv_btn_create(objects.cont_menu_text);
         lv_obj_set_size(btn, 220, 35); 
@@ -143,7 +158,8 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
         lv_label_set_text(label, items[i]);
         lv_obj_center(label); 
         
-        // [FIX LỖI KẸT FOCUS]: Đã gỡ bỏ thao tác gán mảng menuButtons[i] = btn; để tránh vỡ Stack
+        // Gán cứng vào mảng
+        menuButtons[i] = btn;
     }
 }
 
@@ -196,12 +212,11 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 5);
             }
             else if (state.currentMenu == MENU_USB_MODE || state.currentMenu == MENU_OTA || state.currentMenu == MENU_SELECT_BG) {
-                // Nới rộng bộ nhớ đệm Array lên 30 để triệt tiêu lỗi Tràn Bộ Nhớ làm đứng Encoder
                 const char* items[30]; 
                 int count = 0;
                 
                 if (state.currentMenu == MENU_USB_MODE) {
-                    lv_label_set_text(objects.label_menu, "SD Card Files"); storage.loadFiles();
+                    lv_label_set_text(objects.label_menu, "SD Card Files"); 
                     for (int i = 0; i < storage.fileCount; i++) items[i] = storage.fileNames[i];
                     count = storage.fileCount;
                 } else if (state.currentMenu == MENU_OTA) {
@@ -209,7 +224,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
                     for (int i = 0; i < ota.versionCount && i < 14; i++) items[i] = ota.versions[i].name;
                     count = ota.versionCount;
                 } else if (state.currentMenu == MENU_SELECT_BG) {
-                    lv_label_set_text(objects.label_menu, "Select BG"); storage.loadBgFiles();
+                    lv_label_set_text(objects.label_menu, "Select BG"); 
                     for (int i = 0; i < storage.bgFileCount; i++) items[i] = storage.bgFileNames[i];
                     count = storage.bgFileCount;
                 }
@@ -218,16 +233,15 @@ void DisplayLogic::updateUI(RemoteState &state) {
             lastMenuType = state.currentMenu;
         }
 
-        // [FIX LỖI KẸT FOCUS]: Gọi object con trực tiếp từ LVGL cha, thay vì truy cập mảng rủi ro
+        // [SỬA LỖI FOCUS]: Gọi trực tiếp con trỏ trên mảng an toàn
         for (int i = 0; i < currentMenuCount; i++) {
-            lv_obj_t* btn = lv_obj_get_child(objects.cont_menu_text, i);
-            if (btn == NULL) continue;
+            if (menuButtons[i] == NULL) continue;
             
             if (i == state.menuIndex) {
-                lv_obj_add_state(btn, LV_STATE_CHECKED);
-                lv_obj_scroll_to_view(btn, LV_ANIM_ON);
+                lv_obj_add_state(menuButtons[i], LV_STATE_CHECKED);
+                lv_obj_scroll_to_view(menuButtons[i], LV_ANIM_ON);
             } else {
-                lv_obj_clear_state(btn, LV_STATE_CHECKED);
+                lv_obj_clear_state(menuButtons[i], LV_STATE_CHECKED);
             }
         }
     }

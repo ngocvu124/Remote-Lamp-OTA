@@ -24,6 +24,9 @@ static bool isViewingFile = false;
 static bool isViewingImage = false; 
 static int selectedOtaIndex = -1; 
 
+static bool pendingImageLoad = false;
+static uint32_t lastScrollTime = 0;
+
 void stockUpdateTask(void *pvParameters) {
     while (1) {
         if (appState.currentMenu == MENU_STOCK) {
@@ -119,6 +122,7 @@ void AppLogic::handleEvents() {
             if (isViewingFile || isViewingImage) {
                 isViewingFile = false;
                 isViewingImage = false; 
+                pendingImageLoad = false;
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); 
                     display.closeProgressPopup(); 
@@ -141,8 +145,7 @@ void AppLogic::handleEvents() {
                     xSemaphoreGive(xGuiSemaphore);
                 }
             }
-            else if (isViewingImage) {
-                // Đang xem ảnh thì khóa cuộn, không cho Update UI nhảy menu
+            else if (isViewingImage && appState.currentMenu != MENU_SELECT_BG) {
                 ui_needs_update = false; 
             }
             else if (appState.currentMenu == MENU_NONE || appState.currentMenu == MENU_SET_SLEEP || appState.currentMenu == MENU_SET_BACKLIGHT) {
@@ -169,9 +172,22 @@ void AppLogic::handleEvents() {
                 }
             }
             else {
-                // Di chuyển focus bình thường cho mọi Menu
                 appState.menuIndex = encoder.getEncoderValue(); 
                 if (appState.currentMenu == MENU_STOCK) appState.stockIndex = appState.menuIndex;
+
+                if (isViewingImage && appState.currentMenu == MENU_SELECT_BG) {
+                    if (appState.menuIndex == storage.bgFileCount) {
+                        pendingImageLoad = false;
+                        isViewingImage = false; 
+                        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                            display.closeImagePreview();
+                            xSemaphoreGive(xGuiSemaphore);
+                        }
+                    } else {
+                        pendingImageLoad = true;
+                        lastScrollTime = millis();
+                    }
+                }
             }
         }
 
@@ -179,12 +195,13 @@ void AppLogic::handleEvents() {
             if ((isViewingFile || isViewingImage) && appState.currentMenu != MENU_SELECT_BG) {
                 isViewingFile = false;
                 isViewingImage = false;
+                pendingImageLoad = false;
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); 
                     display.closeImagePreview();
                     xSemaphoreGive(xGuiSemaphore);
                 }
-                encoder.setEncoderValue(appState.menuIndex);
+                encoder.setEncoderValue(appState.menuIndex); 
             } else {
                 switch (appState.currentMenu) {
                     case MENU_MAIN:
@@ -217,6 +234,7 @@ void AppLogic::handleEvents() {
                         if (appState.menuIndex == storage.bgFileCount) {
                             if (isViewingImage) {
                                 isViewingImage = false;
+                                pendingImageLoad = false;
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                                     display.closeImagePreview(); xSemaphoreGive(xGuiSemaphore);
                                 }
@@ -225,9 +243,8 @@ void AppLogic::handleEvents() {
                         } else {
                             char fullPath[64];
                             snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
-                            
-                            if (isViewingImage) { 
-                                // Bấm lần 2: Áp dụng ảnh đang xem làm BG
+                            if (isViewingImage) {
+                                pendingImageLoad = false; 
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 storage.saveConfig(appState);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
@@ -235,10 +252,9 @@ void AppLogic::handleEvents() {
                                     display.loadBackgroundFromSD();
                                     xSemaphoreGive(xGuiSemaphore);
                                 }
-                                isViewingImage = false; 
-                                exitMenu(); 
+                                isViewingImage = false; exitMenu(); 
                             } else {
-                                // Bấm lần 1: Mở chế độ xem trước ảnh
+                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     FsFile file = sd_bg.open(fullPath, O_READ);
                                     if (file) {
@@ -286,6 +302,21 @@ void AppLogic::handleEvents() {
         }
     }
 
+    if (pendingImageLoad && (millis() - lastScrollTime > 300)) {
+        pendingImageLoad = false;
+        char fullPath[64];
+        snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
+        
+        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+            FsFile file = sd_bg.open(fullPath, O_READ);
+            if (file) {
+                display.showImagePreview(file);
+                file.close();
+            }
+            xSemaphoreGive(xGuiSemaphore);
+        }
+    }
+
     static uint32_t last_ui_update = 0;
     if (ui_needs_update || (millis() - last_ui_update > 200)) {
         if (!isViewingFile && !isViewingImage && xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
@@ -313,11 +344,29 @@ void AppLogic::enterMenu(int level) {
         return; 
     }
     
-    if (level == MENU_MAIN) encoder.setBoundaries(0, 6, true);         
-    else if (level == MENU_CONTROL) encoder.setBoundaries(0, 4, true); 
-    else if (level == MENU_USB_MODE) { storage.loadFiles(); encoder.setBoundaries(0, storage.fileCount, true); }
-    else if (level == MENU_SELECT_BG) { storage.loadBgFiles(); encoder.setBoundaries(0, storage.bgFileCount, true); }
-    else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) encoder.setBoundaries(0, 1000, false); 
+    if (level == MENU_MAIN) {
+        encoder.setBoundaries(0, 6, true);         
+    } 
+    else if (level == MENU_CONTROL) {
+        encoder.setBoundaries(0, 4, true); 
+    } 
+    else if (level == MENU_USB_MODE) { 
+        if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+            storage.loadFiles(); 
+            encoder.setBoundaries(0, storage.fileCount, true); 
+            xSemaphoreGive(xGuiSemaphore);
+        }
+    } 
+    else if (level == MENU_SELECT_BG) { 
+        if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+            storage.loadBgFiles(); 
+            encoder.setBoundaries(0, storage.bgFileCount, true); 
+            xSemaphoreGive(xGuiSemaphore);
+        }
+    } 
+    else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) {
+        encoder.setBoundaries(0, 1000, false); 
+    }
     
     encoder.setEncoderValue(0);
 }
