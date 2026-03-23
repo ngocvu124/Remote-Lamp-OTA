@@ -75,6 +75,13 @@ static void webTask(void* pvParameters) {
                 Serial.printf("[WEB] Starting upload: %s\n", upload.filename.c_str());
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
+                    
+                    // CÚ CHỐT: Xóa file cũ trước khi tạo mới để tránh lỗi từ chối ghi đè của thẻ SD
+                    if (sd_bg.exists("/bg.bin")) {
+                        sd_bg.remove("/bg.bin");
+                        Serial.println("[WEB] Deleted old /bg.bin");
+                    }
+
                     uploadFile = sd_bg.open("/bg.bin", O_WRITE | O_CREAT | O_TRUNC);
                     if (uploadFile) Serial.println("[WEB] File /bg.bin opened for overwriting.");
                     else Serial.println("[WEB] ERROR: Could not open file for writing!");
@@ -106,11 +113,9 @@ static void webTask(void* pvParameters) {
                     server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
                     server->sendHeader("Connection", "close");
                     
-                    // Khóa dung lượng file để chống chèn rác
                     server->setContentLength(file.size());
                     server->send(200, "application/octet-stream", ""); 
 
-                    // Bơm dữ liệu
                     uint8_t buffer[1024];
                     int bytesRead;
                     while (1) {
