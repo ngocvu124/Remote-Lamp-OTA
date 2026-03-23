@@ -8,7 +8,6 @@ extern SdFs sd_bg;
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
     
-    // Giao hoàn toàn quyền quản lý chân CS cho thư viện SdFat
     if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)))) {
         isReady = true;
         Serial.println("[STORAGE] SD Mount OK (16MHz)!");
@@ -32,8 +31,19 @@ void StorageLogic::begin() {
 void StorageLogic::loadFiles() {
     if (!isReady) return;
     fileCount = 0;
-    FsFile dir = sd_bg.open("/"); 
-    if (!dir) return;
+    
+    FsFile dir = sd_bg.open("/", O_READ); 
+    // CÚ CHỐT: Nếu nhiễu SPI làm rớt thẻ, ép Remount ngay lập tức!
+    if (!dir) {
+        Serial.println("[STORAGE-WARN] SD state lost! Auto-Remounting...");
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)));
+        dir = sd_bg.open("/", O_READ);
+        if (!dir) {
+            Serial.println("[STORAGE-ERR] Auto-Remount failed!");
+            return;
+        }
+    }
+    
     dir.rewindDirectory();
     
     while (fileCount < 15) {
@@ -41,8 +51,7 @@ void StorageLogic::loadFiles() {
         if (!file) break;
         if (!file.isDirectory()) {
             file.getName(fileNames[fileCount], 32);
-            // ĐÃ GỠ BỎ ĐIỀU KIỆN GIẤU FILE: Cho phép hiện cả config.json và bg.bin trong SD Explorer
-            fileCount++;
+            fileCount++; // Hiện toàn bộ file, kể cả config.json và bg.bin
         }
         file.close();
     }
@@ -53,8 +62,19 @@ void StorageLogic::loadFiles() {
 void StorageLogic::loadBgFiles() {
     if (!isReady) return;
     bgFileCount = 0;
-    FsFile dir = sd_bg.open("/background"); 
-    if (!dir) return;
+    
+    FsFile dir = sd_bg.open("/background", O_READ); 
+    // CÚ CHỐT: Auto-Remount cho mục Change BG
+    if (!dir) {
+        Serial.println("[STORAGE-WARN] SD state lost! Auto-Remounting...");
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)));
+        dir = sd_bg.open("/background", O_READ);
+        if (!dir) {
+            Serial.println("[STORAGE-ERR] Auto-Remount failed!");
+            return;
+        }
+    }
+    
     dir.rewindDirectory();
     
     while (bgFileCount < 15) {
