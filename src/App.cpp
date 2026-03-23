@@ -99,12 +99,15 @@ void otaUpdateTask(void *pvParameters) {
 }
 
 void AppLogic::begin() {
+    Serial.println("[APP] begin() called");
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
         display.loadBackgroundFromSD(); 
         encoder.setBoundaries(0, 100, false);
         encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
         display.updateUI(appState);
         xSemaphoreGive(xGuiSemaphore);
+    } else {
+        Serial.println("[APP-ERR] Failed to take GUI Semaphore in begin()");
     }
 }
 
@@ -116,6 +119,7 @@ void AppLogic::handleEvents() {
         ui_needs_update = true; 
         
         if (event == ENC_LONG_PRESS) {
+            Serial.println("[APP] Event: ENC_LONG_PRESS");
             if (isViewingFile || isViewingImage) {
                 isViewingFile = false;
                 isViewingImage = false; 
@@ -142,7 +146,6 @@ void AppLogic::handleEvents() {
                 }
             }
             else if (isViewingImage && appState.currentMenu != MENU_SELECT_BG) {
-                // Đang xem ảnh trong File Explorer thì khóa cuộn list Menu
                 ui_needs_update = false; 
             }
             else if (appState.currentMenu == MENU_NONE || appState.currentMenu == MENU_SET_SLEEP || appState.currentMenu == MENU_SET_BACKLIGHT) {
@@ -169,10 +172,12 @@ void AppLogic::handleEvents() {
                 }
             }
             else {
+                int oldIndex = appState.menuIndex;
                 appState.menuIndex = encoder.getEncoderValue(); 
+                Serial.printf("[APP] Encoder scrolled. Old: %d, New: %d, Menu: %d\n", oldIndex, appState.menuIndex, appState.currentMenu);
+                
                 if (appState.currentMenu == MENU_STOCK) appState.stockIndex = appState.menuIndex;
 
-                // Cho phép vặn núm để lướt xem ảnh liên tục trong mục Select BG
                 if (isViewingImage && appState.currentMenu == MENU_SELECT_BG) {
                     if (appState.menuIndex == storage.bgFileCount) {
                         isViewingImage = false; 
@@ -183,11 +188,14 @@ void AppLogic::handleEvents() {
                     } else {
                         char fullPath[64];
                         snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
+                        Serial.printf("[APP] Previewing image: %s\n", fullPath);
                         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                             FsFile file = sd_bg.open(fullPath, O_READ);
                             if (file) {
                                 display.showImagePreview(file);
                                 file.close();
+                            } else {
+                                Serial.println("[APP-ERR] Failed to open image for preview!");
                             }
                             xSemaphoreGive(xGuiSemaphore);
                         }
@@ -197,6 +205,7 @@ void AppLogic::handleEvents() {
         }
 
         if (event == ENC_CLICK) {
+            Serial.printf("[APP] Event: ENC_CLICK. menuIndex: %d\n", appState.menuIndex);
             if ((isViewingFile || isViewingImage) && appState.currentMenu != MENU_SELECT_BG) {
                 isViewingFile = false;
                 isViewingImage = false;
@@ -249,6 +258,7 @@ void AppLogic::handleEvents() {
                             if (isViewingImage) {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 storage.saveConfig(appState);
+                                Serial.printf("[APP] Applied new BG: %s\n", fullPath);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     display.closeImagePreview();
                                     display.loadBackgroundFromSD();
@@ -257,11 +267,14 @@ void AppLogic::handleEvents() {
                                 isViewingImage = false; exitMenu(); 
                             } else {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
+                                Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     FsFile file = sd_bg.open(fullPath, O_READ);
                                     if (file) {
                                         if (display.showImagePreview(file)) isViewingImage = true;
                                         file.close();
+                                    } else {
+                                        Serial.println("[APP-ERR] Could not open file for preview.");
                                     }
                                     xSemaphoreGive(xGuiSemaphore);
                                 }
@@ -291,7 +304,6 @@ void AppLogic::handleEvents() {
                         if (appState.menuIndex == ota.versionCount) {
                             exitMenu(); 
                         } else {
-                            // Chọn phiên bản cần cập nhật
                             selectedOtaIndex = appState.menuIndex; 
                         }
                         break;
@@ -316,6 +328,7 @@ void AppLogic::handleEvents() {
 }
 
 void AppLogic::enterMenu(int level) {
+    Serial.printf("\n[APP] ---> enterMenu(%d)\n", level);
     appState.currentMenu = (MenuLevel)level;
     appState.menuIndex = 0;
     
@@ -339,20 +352,24 @@ void AppLogic::enterMenu(int level) {
         encoder.setBoundaries(0, 4, true); 
     } 
     else if (level == MENU_USB_MODE) { 
-        // BẢO VỆ BUS SPI BẰNG SEMAPHORE. CÚ CHỐT SỬA LỖI MẤT FOCUS KHI VÀO FILE EXPLORER!
+        Serial.println("[APP] Waiting for Semaphore to load USB files...");
         if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
             storage.loadFiles(); 
             xSemaphoreGive(xGuiSemaphore);
+            Serial.printf("[APP] Loaded %d files for USB_MODE\n", storage.fileCount);
         }
         encoder.setBoundaries(0, storage.fileCount, true); 
+        Serial.printf("[APP] Encoder bounds set to: 0 - %d\n", storage.fileCount);
     } 
     else if (level == MENU_SELECT_BG) { 
-        // BẢO VỆ BUS SPI BẰNG SEMAPHORE
+        Serial.println("[APP] Waiting for Semaphore to load BG files...");
         if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
             storage.loadBgFiles(); 
             xSemaphoreGive(xGuiSemaphore);
+            Serial.printf("[APP] Loaded %d files for SELECT_BG\n", storage.bgFileCount);
         }
         encoder.setBoundaries(0, storage.bgFileCount, true); 
+        Serial.printf("[APP] Encoder bounds set to: 0 - %d\n", storage.bgFileCount);
     } 
     else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) {
         encoder.setBoundaries(0, 1000, false); 
@@ -362,6 +379,7 @@ void AppLogic::enterMenu(int level) {
 }
 
 void AppLogic::exitMenu() {
+    Serial.println("[APP] <--- exitMenu()");
     if (appState.currentMenu == MENU_STOCK || appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 

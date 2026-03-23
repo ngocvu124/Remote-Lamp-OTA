@@ -82,28 +82,49 @@ void DisplayLogic::begin() {
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
+    Serial.printf("[DISPLAY] Loading background from: %s\n", appState.bgFilePath);
     FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
-    if (!file) file = sd_bg.open("/bg.bin", O_READ);
-    if (!file) return;
+    if (!file) {
+        Serial.println("[DISPLAY] Custom BG not found, trying /bg.bin");
+        file = sd_bg.open("/bg.bin", O_READ);
+    }
+    
+    if (!file) {
+        Serial.println("[DISPLAY-ERR] No background file found on SD!");
+        return;
+    }
 
-    if (file.size() < 115200) { file.close(); return; }
+    size_t fileSize = file.size();
+    Serial.printf("[DISPLAY] File size: %d bytes\n", (int)fileSize);
+
+    if (fileSize < 115200) { 
+        Serial.println("[DISPLAY-ERR] File is too small (< 115200)!");
+        file.close(); 
+        return; 
+    }
 
     if (bg_data_buffer != NULL) { 
+        Serial.println("[DISPLAY] Freeing old background buffer...");
         heap_caps_free(bg_data_buffer); 
         bg_data_buffer = NULL; 
     }
 
+    Serial.println("[DISPLAY] Allocating 115200 bytes in PSRAM...");
     bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     
     if (bg_data_buffer) {
         size_t totalRead = 0;
+        Serial.println("[DISPLAY] Reading chunks...");
         while (totalRead < 115200) {
             int r = file.read(bg_data_buffer + totalRead, 4096);
             if (r <= 0) break;
             totalRead += r;
         }
+        
+        Serial.printf("[DISPLAY] Total bytes read: %d\n", totalRead);
 
         if (totalRead >= 115200) {
+            Serial.println("[DISPLAY] Creating Image Descriptor & clearing Cache...");
             custom_bg.header.always_zero = 0;
             custom_bg.header.w = 240;
             custom_bg.header.h = 240;
@@ -111,14 +132,14 @@ void DisplayLogic::loadBackgroundFromSD() {
             custom_bg.data_size = 115200;
             custom_bg.data = bg_data_buffer;
             
-            // Xóa cache của LVGL
             lv_img_cache_invalidate_src(NULL);
             
-            // CÚ CHỐT SỬA MÀN HÌNH ĐEN: Gỡ hình cũ ra trước khi áp hình mới
+            Serial.println("[DISPLAY] Setting empty bg first...");
             lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
             lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
             lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
             
+            Serial.println("[DISPLAY] Applying new BG...");
             lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
             lv_obj_set_style_bg_opa(objects.main, 0, 0);
             lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
@@ -127,7 +148,12 @@ void DisplayLogic::loadBackgroundFromSD() {
             lv_obj_set_style_bg_opa(objects.stock, 0, 0);
             
             lv_obj_invalidate(objects.main);
+            Serial.println("[DISPLAY] loadBackgroundFromSD SUCCESS!");
+        } else {
+            Serial.println("[DISPLAY-ERR] Read size is less than 115200 bytes!");
         }
+    } else {
+        Serial.println("[DISPLAY-ERR] Failed to allocate memory for background!");
     }
     file.close();
 }
@@ -135,12 +161,16 @@ void DisplayLogic::loadBackgroundFromSD() {
 void DisplayLogic::loop() { lv_timer_handler(); }
 
 void DisplayLogic::buildMenu(const char* items[], int count) {
+    Serial.printf("[DISPLAY] buildMenu called. Count: %d\n", count);
     lv_obj_clean(objects.cont_menu_text); 
     currentMenuCount = count;
     
     for(int i = 0; i < count; i++) {
-        // Bảo vệ mảng tĩnh menuButtons[15] được khai báo trong Display.h gốc
-        if (i >= 15) break; 
+        // Bảo vệ mảng tĩnh menuButtons[15] trong thư viện
+        if (i >= 15) {
+            Serial.println("[DISPLAY-WARN] Exceeded maximum menu items (15). Stopping.");
+            break; 
+        }
         
         lv_obj_t * btn = lv_btn_create(objects.cont_menu_text);
         lv_obj_set_size(btn, 220, 35); 
@@ -199,6 +229,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
         if (lv_scr_act() != objects.menu) lv_scr_load(objects.menu);
 
         if (state.currentMenu != lastMenuType) {
+            Serial.printf("[DISPLAY] Rebuilding menu layout for type: %d\n", state.currentMenu);
             if (state.currentMenu == MENU_MAIN) {
                 lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 7); 
             } 
