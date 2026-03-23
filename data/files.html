@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Thẻ Nhớ SD ESP32</title>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; text-align: center; margin: 0; }
+        .container { max-width: 800px; margin: 0 auto; background: #333; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        h2 { color: #ff7200; margin-top: 0; }
+        table { width: 100%; margin: 20px 0; border-collapse: collapse; background: #222; border-radius: 6px; overflow: hidden; }
+        th, td { padding: 12px; border-bottom: 1px solid #444; text-align: left; }
+        th { background: #ff7200; color: #fff; text-transform: uppercase; font-size: 14px; }
+        td { font-size: 15px; }
+        tr:hover { background: #444; }
+        .btn { padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 5px; transition: 0.3s; }
+        .btn-del { background: #e74c3c; color: #fff; }
+        .btn-del:hover { background: #c0392b; }
+        .btn-dl { background: #2ecc71; color: #fff; }
+        .btn-dl:hover { background: #27ae60; }
+        .upload-box { background: #2a2a2a; padding: 15px; border-radius: 6px; border: 2px dashed #ff7200; margin-bottom: 20px; }
+        .btn-up { background: #ff7200; color: #fff; padding: 10px 20px; font-size: 16px; margin-top: 10px; width: 100%; max-width: 250px; }
+        .btn-up:hover { background: #e66600; }
+        input[type="file"] { width: 100%; max-width: 300px; color: #aaa; }
+        #status { margin-top: 10px; font-weight: bold; font-size: 14px; color: #00e5ff; min-height: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🗂 QUẢN LÝ FILE THẺ NHỚ SD</h2>
+        
+        <div class="upload-box">
+            <input type="file" id="fileInput">
+            <br>
+            <button class="btn btn-up" onclick="uploadFile()">🚀 Tải File Lên ESP32</button>
+            <div id="status">Đang tải danh sách file...</div>
+        </div>
+        
+        <table id="fileTable">
+            <thead>
+                <tr>
+                    <th>Tên File</th>
+                    <th>Dung Lượng</th>
+                    <th style="text-align: right;">Hành Động</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        function formatBytes(bytes) {
+            if(bytes === 0) return '0 Bytes';
+            const k = 1024, dm = 2, sizes = ['Bytes', 'KB', 'MB', 'GB'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        function loadFiles() {
+            fetch('/list').then(r => r.json()).then(data => {
+                const tbody = document.querySelector('#fileTable tbody');
+                tbody.innerHTML = '';
+                if(data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">Thẻ nhớ trống!</td></tr>';
+                }
+                data.forEach(f => {
+                    tbody.innerHTML += `<tr>
+                        <td style="color:#00e5ff; font-weight:bold;">${f.name}</td>
+                        <td style="color:#aaa;">${formatBytes(f.size)}</td>
+                        <td style="text-align: right;">
+                            <button class="btn btn-dl" onclick="window.location.href='/download_file?filename=/${f.name}'">Tải Về</button>
+                            <button class="btn btn-del" onclick="deleteFile('/${f.name}')">Xóa</button>
+                        </td>
+                    </tr>`;
+                });
+                document.getElementById('status').innerText = 'Sẵn sàng!';
+                document.getElementById('status').style.color = '#00ff00';
+            }).catch(() => {
+                document.getElementById('status').innerText = 'Lỗi kết nối tới ESP32!';
+                document.getElementById('status').style.color = '#e74c3c';
+            });
+        }
+
+        function deleteFile(name) {
+            if(!confirm('CẢNH BÁO: Bạn có chắc chắn muốn xóa vĩnh viễn ' + name + '?')) return;
+            
+            document.getElementById('status').innerText = 'Đang xóa...';
+            document.getElementById('status').style.color = '#ffaa00';
+            
+            const formData = new URLSearchParams();
+            formData.append('filename', name);
+            
+            fetch('/delete', {method: 'POST', body: formData})
+            .then(r => {
+                if(r.ok) {
+                    document.getElementById('status').innerText = 'Xóa thành công!';
+                    document.getElementById('status').style.color = '#00ff00';
+                    loadFiles();
+                } else {
+                    document.getElementById('status').innerText = 'Lỗi khi xóa file!';
+                    document.getElementById('status').style.color = '#e74c3c';
+                }
+            });
+        }
+
+        function uploadFile() {
+            const file = document.getElementById('fileInput').files[0];
+            if(!file) return alert('Vui lòng chọn 1 file từ máy tính trước!');
+            
+            const formData = new FormData();
+            formData.append('file', file, file.name);
+            
+            document.getElementById('status').innerText = 'Đang tải lên, vui lòng không tắt trang...';
+            document.getElementById('status').style.color = '#ffaa00';
+            
+            fetch('/upload_file', { method: 'POST', body: formData })
+            .then(r => {
+                if(r.ok) {
+                    document.getElementById('status').innerText = 'Tải lên thành công!';
+                    document.getElementById('status').style.color = '#00ff00';
+                    document.getElementById('fileInput').value = '';
+                    loadFiles();
+                } else {
+                    document.getElementById('status').innerText = 'Lỗi tải lên!';
+                    document.getElementById('status').style.color = '#e74c3c';
+                }
+            }).catch(() => {
+                document.getElementById('status').innerText = 'Mất kết nối!';
+                document.getElementById('status').style.color = '#e74c3c';
+            });
+        }
+
+        window.onload = loadFiles;
+    </script>
+</body>
+</html>
