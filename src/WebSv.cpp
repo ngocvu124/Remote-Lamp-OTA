@@ -58,7 +58,6 @@ static void webTask(void* pvParameters) {
     } 
     else if (mode == WEB_MODE_UPLOAD) {
         
-        // --- CÁC ROUTE CŨ: UPLOAD HÌNH NỀN ---
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/upload.html", "r");
             if (!file) { server->send(500, "text/plain", "Missing upload.html"); return; }
@@ -66,24 +65,24 @@ static void webTask(void* pvParameters) {
             file.close();
         });
 
+        // CÚ CHỐT: Tự động lưu mọi file background vào /background/
         server->on("/upload", HTTP_POST, [server]() {
             server->send(200, "text/plain", "OK");
-            Serial.println("[WEB] Upload Finished. Applying new background...");
-            
-            // CÚ CHỐT 1: Không khởi động lại ESP nữa, tự động reload lại hình nền ngay lập tức
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                display.loadBackgroundFromSD();
-                xSemaphoreGive(xGuiSemaphore);
-            }
+            Serial.println("[WEB] Upload Finished.");
         }, [server]() {
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
-                Serial.printf("[WEB] Starting bg upload: %s\n", upload.filename.c_str());
+                if (!sd_bg.exists("/background")) sd_bg.mkdir("/background");
+
+                String filename = upload.filename;
+                if (!filename.startsWith("/")) filename = "/" + filename;
+                String fullPath = "/background" + filename;
+
+                Serial.printf("[WEB] Starting bg upload: %s\n", fullPath.c_str());
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
-                    if (sd_bg.exists("/bg.bin")) sd_bg.remove("/bg.bin");
-                    uploadFile = sd_bg.open("/bg.bin", O_WRITE | O_CREAT | O_TRUNC);
-                    if (uploadFile) Serial.println("[WEB] File /bg.bin opened for overwriting.");
+                    if (sd_bg.exists(fullPath.c_str())) sd_bg.remove(fullPath.c_str());
+                    uploadFile = sd_bg.open(fullPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
                     xSemaphoreGive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
@@ -101,7 +100,7 @@ static void webTask(void* pvParameters) {
 
         server->on("/download", HTTP_GET, [server]() {
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                FsFile file = sd_bg.open("/bg.bin", O_READ);
+                FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
                 if (file) {
                     server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
                     server->sendHeader("Connection", "close");
@@ -119,10 +118,6 @@ static void webTask(void* pvParameters) {
                 xSemaphoreGive(xGuiSemaphore);
             } else server->send(500, "text/plain", "SD busy");
         });
-
-        // ==========================================================
-        // --- TÍNH NĂNG QUẢN LÝ FILE TRÊN TRÌNH DUYỆT ---
-        // ==========================================================
 
         server->on("/files", HTTP_GET, [server]() {
             File file = LittleFS.open("/files.html", "r");
@@ -247,13 +242,12 @@ static void webTask(void* pvParameters) {
     while(webServer.isRunning) {
         server->handleClient();
         vTaskDelay(pdMS_TO_TICKS(20));
-        if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA) webServer.isRunning = false;
-        if (mode == WEB_MODE_UPLOAD && appState.currentMenu != MENU_UPLOAD_BG) webServer.isRunning = false;
+        if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) webServer.isRunning = false;
+        if (mode == WEB_MODE_UPLOAD && appState.currentMenu != MENU_WEB_SERVER) webServer.isRunning = false;
     }
     server->stop();
     delete server; 
 
-    // CÚ CHỐT 2: Tự động dọn dẹp sạch sẽ khung Popup thông báo IP trên màn hình khi Task kết thúc
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
         display.closeProgressPopup();
         xSemaphoreGive(xGuiSemaphore);
@@ -270,7 +264,7 @@ bool WebServerLogic::runWiFiSetup() {
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_UPLOAD_BG) return false;
+        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) return false;
     }
     if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_AP_STA);

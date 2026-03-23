@@ -11,6 +11,7 @@ public:
     
     void begin();
     void loadFiles();
+    void loadBgFiles();
     char* readFileToPSRAM(const char* filename);
     void freePSRAMBuffer(char* buffer);
     void saveConfig(RemoteState &state);
@@ -18,6 +19,9 @@ public:
 
     char fileNames[15][32]; 
     int fileCount = 0;
+    
+    char bgFileNames[15][32]; 
+    int bgFileCount = 0;
 };
 
 extern StorageLogic storage;

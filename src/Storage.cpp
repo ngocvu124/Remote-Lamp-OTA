@@ -10,6 +10,12 @@ void StorageLogic::begin() {
     if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(10)))) {
         isReady = true;
         Serial.println("[STORAGE] SD Mount OK!");
+        
+        // Tạo thư mục nếu chưa có
+        if (!sd_bg.exists("/background")) {
+            sd_bg.mkdir("/background");
+        }
+        
         loadFiles();
     } else {
         isReady = false;
@@ -35,7 +41,7 @@ void StorageLogic::loadFiles() {
         char name[32];
         file.getName(name, 32);
         
-        // CÚ CHỐT: Bỏ qua file không có tên hoặc file hệ thống rác
+        // Bỏ qua file không có tên hoặc file hệ thống rác
         if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
             if (fileCount < 14) {
                 strcpy(fileNames[fileCount], name);
@@ -49,13 +55,35 @@ void StorageLogic::loadFiles() {
     Serial.printf("[STORAGE] Scan finished. Total: %d files.\n", fileCount);
 }
 
+void StorageLogic::loadBgFiles() {
+    if (!isReady) return;
+    
+    bgFileCount = 0;
+    FsFile dir = sd_bg.open("/background"); 
+    if (!dir) return;
+    dir.rewind();
+
+    FsFile file;
+    while (file.openNext(&dir, O_READ)) {
+        char name[32];
+        file.getName(name, 32);
+        
+        if (!file.isDir() && !file.isHidden() && strlen(name) > 0) {
+            if (bgFileCount < 14) {
+                strcpy(bgFileNames[bgFileCount], name);
+                bgFileCount++;
+            }
+        }
+        file.close();
+    }
+    dir.close();
+}
+
 char* StorageLogic::readFileToPSRAM(const char* filename) {
     if (!isReady) return NULL;
 
-    // Mở trực tiếp bằng tên file, SdFat sẽ tìm ở thư mục hiện tại (root)
     FsFile file = sd_bg.open(filename, O_READ);
     if (!file) {
-        // Nếu không mở được, thử thêm dấu / vào đầu
         char path[40];
         sprintf(path, "/%s", filename);
         file = sd_bg.open(path, O_READ);
@@ -74,7 +102,6 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
     }
 
     size_t size = file.size();
-    // Giới hạn đọc 2KB để tránh tràn RAM
     size_t readSize = size > 2048 ? 2048 : size;
 
     char* buffer = (char*)malloc(readSize + 1);
@@ -98,6 +125,7 @@ void StorageLogic::saveConfig(RemoteState &state) {
         StaticJsonDocument<256> doc;
         doc["sleepTimeout"] = state.sleepTimeout;
         doc["oledBrightness"] = state.oledBrightness;
+        doc["bgFilePath"] = state.bgFilePath;
         serializeJson(doc, file);
         file.close();
     }
@@ -112,6 +140,9 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         if (!error) {
             state.sleepTimeout = doc["sleepTimeout"] | 30;
             state.oledBrightness = doc["oledBrightness"] | 50;
+            if (doc.containsKey("bgFilePath")) {
+                strlcpy(state.bgFilePath, doc["bgFilePath"], sizeof(state.bgFilePath));
+            }
         }
         file.close();
         return true;

@@ -69,7 +69,8 @@ enum MenuLevel {
     MENU_USB_MODE = 6,
     MENU_STOCK = 7,
     MENU_OTA = 8,
-    MENU_UPLOAD_BG = 9 
+    MENU_WEB_SERVER = 9,
+    MENU_SELECT_BG = 10 
 };
 
 struct RemoteState {
@@ -83,6 +84,7 @@ struct RemoteState {
     int sleepTimeout = 30;
     int oledBrightness = 50;
     int stockIndex = 0;
+    char bgFilePath[64] = "/background/bg.bin";
 };
 
 #define SCREEN_WIDTH    240 
