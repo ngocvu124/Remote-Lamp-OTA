@@ -22,7 +22,8 @@ static lv_obj_t* preview_img_obj = NULL;
 
 #define BACKLIGHT_CHANNEL 0 
 
-const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Exit"}; 
+// Đã cập nhật đủ 7 mục
+const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
 
@@ -88,10 +89,13 @@ void DisplayLogic::loadBackgroundFromSD() {
         return; 
     }
     
-    FsFile file = sd_bg.open("/bg.bin", O_READ);
+    FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
     if (!file) {
-        Serial.println("[DISPLAY] bg.bin not found on SD.");
-        return;
+        file = sd_bg.open("/bg.bin", O_READ);
+        if (!file) {
+            Serial.println("[DISPLAY] bg.bin not found on SD.");
+            return;
+        }
     }
 
     size_t fileSize = file.size();
@@ -109,7 +113,6 @@ void DisplayLogic::loadBackgroundFromSD() {
     bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM);
     
     if (bg_data_buffer) {
-        // Đọc xong là dùng luôn, không cần tráo byte nữa vì file đã là Little Endian
         file.read(bg_data_buffer, 115200);
 
         custom_bg.header.always_zero = 0;
@@ -211,7 +214,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
         if (state.currentMenu != lastMenuType) {
             if (state.currentMenu == MENU_MAIN) {
                 lv_label_set_text(objects.label_menu, "Main Menu"); 
-                buildMenu(mainMenuItems, 6); 
+                buildMenu(mainMenuItems, 7); 
             } 
             else if (state.currentMenu == MENU_CONTROL) {
                 lv_label_set_text(objects.label_menu, "Control Setup");
@@ -221,18 +224,24 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 lv_label_set_text(objects.label_menu, "Lamp Setup");
                 buildMenu(lampMenuItems, 5);
             }
-            else if (state.currentMenu == MENU_USB_MODE || state.currentMenu == MENU_OTA) {
-                lv_label_set_text(objects.label_menu, state.currentMenu == MENU_OTA ? "Select Version" : "SD Card Files");
+            else if (state.currentMenu == MENU_USB_MODE || state.currentMenu == MENU_OTA || state.currentMenu == MENU_SELECT_BG) {
                 const char* items[15]; 
                 int count = 0;
                 
                 if (state.currentMenu == MENU_USB_MODE) {
+                    lv_label_set_text(objects.label_menu, "SD Card Files");
                     storage.loadFiles();
                     for (int i = 0; i < storage.fileCount; i++) { items[i] = storage.fileNames[i]; }
                     count = storage.fileCount;
-                } else {
+                } else if (state.currentMenu == MENU_OTA) {
+                    lv_label_set_text(objects.label_menu, "Select Version");
                     for (int i = 0; i < ota.versionCount && i < 14; i++) { items[i] = ota.versions[i].name; }
                     count = ota.versionCount;
+                } else if (state.currentMenu == MENU_SELECT_BG) {
+                    lv_label_set_text(objects.label_menu, "Select BG");
+                    storage.loadBgFiles();
+                    for (int i = 0; i < storage.bgFileCount; i++) { items[i] = storage.bgFileNames[i]; }
+                    count = storage.bgFileCount;
                 }
                 
                 items[count] = "Back"; 
@@ -405,7 +414,6 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM);
     if (!preview_data_buffer) return false;
 
-    // Đọc xong là dùng luôn, không cần đảo byte
     file.read(preview_data_buffer, 115200);
 
     preview_img_dsc.header.always_zero = 0;

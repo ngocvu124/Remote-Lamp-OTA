@@ -179,7 +179,6 @@ void AppLogic::handleEvents() {
         }
 
         if (event == ENC_CLICK) {
-            // MẸO: Click để thoát File content (SD Explorer)
             if (isViewingFile && appState.currentMenu == MENU_USB_MODE) {
                 isViewingFile = false;
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
@@ -270,14 +269,13 @@ void AppLogic::handleEvents() {
                         break;
                     case MENU_SELECT_BG:
                         if (appState.menuIndex == storage.bgFileCount) {
-                            enterMenu(MENU_CONTROL); // Nút Back
+                            enterMenu(MENU_CONTROL); 
                         } else {
                             char* fileName = storage.bgFileNames[appState.menuIndex];
                             char fullPath[64];
                             sprintf(fullPath, "/background/%s", fileName);
 
                             if (isViewingImage) {
-                                // CLICK LẦN 2 -> LƯU VÀ ÁP DỤNG NGAY
                                 strcpy(appState.bgFilePath, fullPath);
                                 storage.saveConfig(appState);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
@@ -288,7 +286,6 @@ void AppLogic::handleEvents() {
                                 isViewingImage = false;
                                 exitMenu(); 
                             } else {
-                                // CLICK LẦN 1 -> XEM PREVIEW
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     FsFile file = sd_bg.open(fullPath, O_READ);
                                     if (file) {
@@ -317,7 +314,7 @@ void AppLogic::handleEvents() {
                 }
             }
         }
-    }
+    } // <--- DẤU NGOẶC ĐÓNG NÀY LÀ CÁI ĐÃ BỊ THIẾU Ở BẢN TRƯỚC!
 
     static uint32_t last_ui_update = 0;
     if (ui_needs_update || (millis() - last_ui_update > 200)) {
@@ -351,12 +348,12 @@ void AppLogic::enterMenu(int level) {
             }
         } else if (level == MENU_WEB_SERVER) {
             isViewingFile = false;
-            webServer.runBgUpload(); // Gọi Web Server
+            webServer.runBgUpload(); 
         }
         return; 
     }
     
-    if (level == MENU_MAIN) encoder.setBoundaries(0, 6, true);         // 6 mục + 1 mục Back
+    if (level == MENU_MAIN) encoder.setBoundaries(0, 6, true);         
     else if (level == MENU_CONTROL) encoder.setBoundaries(0, 4, true); 
     else if (level == MENU_LAMP) encoder.setBoundaries(0, 4, true);    
     else if (level == MENU_USB_MODE) {
@@ -365,7 +362,7 @@ void AppLogic::enterMenu(int level) {
     }
     else if (level == MENU_SELECT_BG) {
         storage.loadBgFiles();
-        encoder.setBoundaries(0, storage.bgFileCount, true); // Quét thư mục /background
+        encoder.setBoundaries(0, storage.bgFileCount, true); 
     }
     else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) encoder.setBoundaries(0, 1000, false); 
     
