@@ -170,6 +170,8 @@ void AppLogic::handleEvents() {
                         encoder.setEncoderValue(appState.brightness); 
                     }
                     espNow.send(0, appState.brightness, appState.temperature, ' ');
+                    // LƯU CẤU HÌNH: Tự động lưu khi xoay núm ở màn hình chính
+                    storage.saveConfig(appState); 
                 }
             }
             else {
@@ -234,6 +236,7 @@ void AppLogic::handleEvents() {
                         break;
                     case MENU_SET_SLEEP:         
                     case MENU_SET_BACKLIGHT:
+                        // LƯU CẤU HÌNH: Lưu khi thoát chế độ cài đặt Sleep/Backlight
                         storage.saveConfig(appState); 
                         enterMenu(MENU_CONTROL); 
                         break;
@@ -277,7 +280,7 @@ void AppLogic::handleEvents() {
 
                             if (isViewingImage) {
                                 strcpy(appState.bgFilePath, fullPath);
-                                storage.saveConfig(appState);
+                                storage.saveConfig(appState); // LƯU CẤU HÌNH: Lưu đường dẫn ảnh nền mới
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     display.closeImagePreview();
                                     display.loadBackgroundFromSD();
@@ -310,11 +313,13 @@ void AppLogic::handleEvents() {
                     case MENU_NONE:
                         appState.isTempMode = !appState.isTempMode;
                         encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
+                        // LƯU CẤU HÌNH: Lưu khi chuyển đổi giữa chế độ Temp/Brightness
+                        storage.saveConfig(appState); 
                         break;
                 }
             }
         }
-    } // <--- DẤU NGOẶC ĐÓNG NÀY LÀ CÁI ĐÃ BỊ THIẾU Ở BẢN TRƯỚC!
+    }
 
     static uint32_t last_ui_update = 0;
     if (ui_needs_update || (millis() - last_ui_update > 200)) {
@@ -379,6 +384,8 @@ void AppLogic::exitMenu() {
     appState.currentMenu = MENU_NONE;
     encoder.setBoundaries(0, 100, false);
     encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
+    // LƯU CẤU HÌNH: Lưu lại khi thoát bất cứ menu nào về màn hình chính
+    storage.saveConfig(appState); 
 }
 
 extern "C" void action_on_stock_changed_cb(lv_event_t * e) {

@@ -125,9 +125,12 @@ void StorageLogic::saveConfig(RemoteState &state) {
         StaticJsonDocument<256> doc;
         doc["sleepTimeout"] = state.sleepTimeout;
         doc["oledBrightness"] = state.oledBrightness;
-        doc["bgFilePath"] = state.bgFilePath;
+        doc["brightness"] = state.brightness;     // Bổ sung dòng này
+        doc["temperature"] = state.temperature;   // Bổ sung dòng này
+        doc["bgFilePath"] = state.bgFilePath;     // Bổ sung dòng này (để lưu hình nền)
         serializeJson(doc, file);
         file.close();
+        Serial.println("[STORAGE] Config saved!");
     }
 }
 
@@ -140,6 +143,8 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         if (!error) {
             state.sleepTimeout = doc["sleepTimeout"] | 30;
             state.oledBrightness = doc["oledBrightness"] | 50;
+            state.brightness = doc["brightness"] | 50;       // Bổ sung
+            state.temperature = doc["temperature"] | 50;     // Bổ sung
             if (doc.containsKey("bgFilePath")) {
                 strlcpy(state.bgFilePath, doc["bgFilePath"], sizeof(state.bgFilePath));
             }
