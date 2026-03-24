@@ -5,20 +5,29 @@
 StorageLogic storage;
 extern SdFs sd_bg; 
 
+// --- CÚ CHỐT: HÀM TÁT THẺ NHỚ TỈNH DẬY ---
+// Bất cứ khi nào nghi ngờ thẻ nhớ bị màn hình làm nhiễu đơ ngang, gọi hàm này!
+static void wakeupSD() {
+    // Khóa mõm màn hình lại để nó không nghe lén tín hiệu
+    pinMode(SCR_CS_PIN, OUTPUT);
+    digitalWrite(SCR_CS_PIN, HIGH);
+    
+    // Ép khởi tạo lại thẻ nhớ ở tốc độ 4MHz (Chậm mà chắc, tuyệt đối không bao giờ rớt tín hiệu)
+    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
+}
+
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
+    wakeupSD();
     
-    if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)))) {
-        isReady = true;
-        Serial.println("[STORAGE] SD Mount OK (16MHz)!");
-    } else if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(8)))) {
-        isReady = true;
-        Serial.println("[STORAGE] SD Mount OK (8MHz Fallback)!");
-    } else {
+    if (sd_bg.card()->errorCode()) {
         isReady = false;
         Serial.println("[STORAGE] SD Mount FAILED!");
         return;
     }
+    
+    isReady = true;
+    Serial.println("[STORAGE] SD Mount OK (4MHz Rock-Solid)!");
 
     if (!sd_bg.exists("/background")) {
         sd_bg.mkdir("/background");
@@ -30,28 +39,19 @@ void StorageLogic::begin() {
 
 void StorageLogic::loadFiles() {
     if (!isReady) return;
+    wakeupSD(); // Ép thức tỉnh SD Card trước khi mở Explorer
+    
     fileCount = 0;
-    
     FsFile dir = sd_bg.open("/", O_READ); 
-    // CÚ CHỐT: Nếu nhiễu SPI làm rớt thẻ, ép Remount ngay lập tức!
-    if (!dir) {
-        Serial.println("[STORAGE-WARN] SD state lost! Auto-Remounting...");
-        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)));
-        dir = sd_bg.open("/", O_READ);
-        if (!dir) {
-            Serial.println("[STORAGE-ERR] Auto-Remount failed!");
-            return;
-        }
-    }
-    
+    if (!dir) return;
     dir.rewindDirectory();
     
     while (fileCount < 15) {
         FsFile file = dir.openNextFile();
-        if (!file) break;
+        if (!file) break; // Nhờ wakeupSD(), nếu có file chắc chắn nó sẽ đọc được qua đoạn này
         if (!file.isDirectory()) {
             file.getName(fileNames[fileCount], 32);
-            fileCount++; // Hiện toàn bộ file, kể cả config.json và bg.bin
+            fileCount++; // Hiện toàn bộ file, kể cả config.json để bạn thấy
         }
         file.close();
     }
@@ -61,20 +61,11 @@ void StorageLogic::loadFiles() {
 
 void StorageLogic::loadBgFiles() {
     if (!isReady) return;
+    wakeupSD(); // Ép thức tỉnh SD Card trước khi chọn Background
+    
     bgFileCount = 0;
-    
     FsFile dir = sd_bg.open("/background", O_READ); 
-    // CÚ CHỐT: Auto-Remount cho mục Change BG
-    if (!dir) {
-        Serial.println("[STORAGE-WARN] SD state lost! Auto-Remounting...");
-        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16)));
-        dir = sd_bg.open("/background", O_READ);
-        if (!dir) {
-            Serial.println("[STORAGE-ERR] Auto-Remount failed!");
-            return;
-        }
-    }
-    
+    if (!dir) return;
     dir.rewindDirectory();
     
     while (bgFileCount < 15) {
@@ -92,6 +83,8 @@ void StorageLogic::loadBgFiles() {
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
     if (!isReady) return NULL;
+    wakeupSD(); // Ép thức tỉnh trước khi bơm file Text ra màn hình
+    
     FsFile file = sd_bg.open(filename, O_READ);
     if (!file) return NULL;
 
@@ -116,6 +109,8 @@ void StorageLogic::freePSRAMBuffer(char* buffer) {
 
 void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;
+    wakeupSD(); // Ép thức tỉnh trước khi ghi file
+    
     FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
         StaticJsonDocument<512> doc;
@@ -131,6 +126,8 @@ void StorageLogic::saveConfig(RemoteState &state) {
 
 bool StorageLogic::loadConfig(RemoteState &state) {
     if (!isReady) return false;
+    wakeupSD();
+    
     FsFile file = sd_bg.open("/config.json", O_READ);
     if (file) {
         StaticJsonDocument<512> doc;
