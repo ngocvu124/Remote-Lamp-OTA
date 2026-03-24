@@ -8,164 +8,221 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
         
-        /* Sidebar */
         .sidebar { width: 260px; background-color: #1e293b; display: flex; flex-direction: column; border-right: 1px solid #334155; }
         .sidebar-header { padding: 25px 20px; font-size: 1.5rem; font-weight: 800; color: #f97316; border-bottom: 1px solid #334155; text-align: center; letter-spacing: 1px; }
         .nav-menu { flex: 1; padding: 20px 15px; display: flex; flex-direction: column; gap: 12px; }
-        .nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #cbd5e1; text-decoration: none; border-radius: 10px; transition: all 0.3s ease; font-weight: 600; font-size: 15px; }
-        .nav-link:hover { background-color: #334155; color: #fff; transform: translateX(5px); }
-        .nav-link.active { background-color: #f97316; color: #fff; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); transform: none; }
-        .github-link { margin-top: auto; background-color: #0f172a; border: 1px solid #334155; color: #38bdf8; }
-        .github-link:hover { background-color: #38bdf8; color: #0f172a; }
-
-        /* Main Content */
-        .main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
-        .header { background-color: #1e293b; padding: 20px 30px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
-        .header h2 { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
-        #status { font-weight: 600; padding: 6px 15px; border-radius: 20px; background: rgba(56, 189, 248, 0.1); color: #38bdf8; font-size: 14px; }
-
-        .content { padding: 30px; max-width: 1000px; margin: 0 auto; width: 100%; }
+        .nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #cbd5e1; text-decoration: none; border-radius: 12px; transition: all 0.3s ease; font-weight: 500; }
+        .nav-link:hover, .nav-link.active { background-color: #f97316; color: #fff; transform: translateX(5px); }
         
-        .upload-card { background: #1e293b; padding: 25px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border: 1px solid #334155; }
-        input[type="file"] { color: #94a3b8; font-size: 15px; }
-        input[type="file"]::file-selector-button { background: #334155; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin-right: 15px; font-weight: bold; transition: 0.3s; }
-        input[type="file"]::file-selector-button:hover { background: #475569; }
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .header { padding: 20px 30px; background-color: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
         
-        .btn-up { background: #f97316; color: #fff; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 10px rgba(249,115,22,0.3); }
-        .btn-up:hover { background: #ea580c; transform: translateY(-2px); }
-
-        table { width: 100%; border-collapse: separate; border-spacing: 0; background: #1e293b; border-radius: 12px; overflow: hidden; border: 1px solid #334155; }
-        th, td { padding: 16px 20px; text-align: left; border-bottom: 1px solid #334155; }
-        th { background: #0f172a; color: #94a3b8; text-transform: uppercase; font-size: 13px; font-weight: 700; letter-spacing: 1px; }
-        tr:last-child td { border-bottom: none; }
-        tr:hover { background: #334155; }
-        td.filename { color: #f8fafc; font-weight: 600; }
-        td.filesize { color: #94a3b8; }
+        .breadcrumb { font-size: 1.2rem; color: #38bdf8; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+        .breadcrumb span { cursor: pointer; transition: color 0.2s; }
+        .breadcrumb span:hover { color: #f97316; text-decoration: underline; }
         
-        .action-btns { display: flex; gap: 10px; justify-content: flex-end; }
-        .btn-action { padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; transition: 0.2s; }
-        .btn-dl { background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
-        .btn-dl:hover { background: #10b981; color: #fff; }
-        .btn-del { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-        .btn-del:hover { background: #ef4444; color: #fff; }
-
-        .footer { padding: 20px; text-align: center; color: #64748b; font-size: 0.85rem; border-top: 1px solid #334155; margin-top: auto; }
-
-        @media (max-width: 768px) {
-            body { flex-direction: column; }
-            .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #334155; }
-            .nav-menu { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 10px; gap: 8px;}
-            .nav-link { padding: 10px 15px; font-size: 13px; }
-            .content { padding: 15px; }
-            .upload-card { flex-direction: column; gap: 15px; text-align: center; }
-            th, td { padding: 12px 10px; }
-            .action-btns { flex-direction: column; gap: 5px; }
-        }
+        .content { flex: 1; padding: 30px; overflow-y: auto; }
+        .toolbar { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
+        
+        .btn { background-color: #f97316; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background-color 0.2s; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2); }
+        .btn:hover { background-color: #ea580c; }
+        .btn-danger { background-color: #ef4444; }
+        .btn-danger:hover { background-color: #dc2626; }
+        .btn-secondary { background-color: #475569; }
+        .btn-secondary:hover { background-color: #334155; }
+        
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+        .file-card { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 15px; display: flex; align-items: center; justify-content: space-between; transition: transform 0.2s, box-shadow 0.2s; }
+        .file-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); border-color: #f97316; }
+        
+        .file-info { display: flex; align-items: center; gap: 15px; overflow: hidden; cursor: pointer; flex: 1; }
+        .file-icon { font-size: 2.2rem; }
+        .file-details { display: flex; flex-direction: column; overflow: hidden; }
+        .file-name { font-weight: 600; font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f1f5f9; }
+        .file-size { font-size: 0.85rem; color: #94a3b8; margin-top: 3px; }
+        
+        .file-actions { display: flex; gap: 8px; margin-left: 10px; }
+        .icon-btn { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #ef4444; font-size: 1.2rem; cursor: pointer; transition: all 0.2s; padding: 8px; display: flex; align-items: center; justify-content: center; }
+        .icon-btn:hover { background: #ef4444; color: white; }
+        
+        #status { padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; text-align: center; border: 1px solid transparent; }
+        
+        input[type="file"] { display: none; }
     </style>
 </head>
 <body>
     <aside class="sidebar">
-        <div class="sidebar-header">💡 Remote Lamp</div>
+        <div class="sidebar-header">LAMP DASHBOARD</div>
         <nav class="nav-menu">
-            <a href="/" class="nav-link">🖼️ Đổi Hình Nền</a>
-            <a href="/files" class="nav-link active">🗂️ Quản Lý File</a>
-            <a href="#" class="nav-link" onclick="alert('Chức năng này chỉ khả dụng khi thiết bị đang ở chế độ Menu Cài Đặt WiFi.')">⚙️ Cài Đặt WiFi</a>
-            <a href="https://github.com/ngocvu124/Remote-Lamp-OTA" target="_blank" class="nav-link github-link">💻 GitHub Project</a>
+            <a href="#" class="nav-link active">📁 Thẻ nhớ SD</a>
+            <button class="btn btn-danger" onclick="exitServer()" style="margin-top: auto; justify-content: center;">Đóng Server (Ra Menu)</button>
         </nav>
     </aside>
 
     <main class="main">
         <header class="header">
-            <h2>Bộ Nhớ SD Card</h2>
-            <div id="status">Đang tải...</div>
+            <div class="breadcrumb" id="breadcrumb">/</div>
+            <div id="status" style="background-color: rgba(56, 189, 248, 0.1); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);">Sẵn sàng</div>
         </header>
         
         <div class="content">
-            <div class="upload-card">
-                <input type="file" id="fileInput">
-                <button class="btn-up" onclick="uploadFile()">🚀 Tải Lên Thẻ SD</button>
+            <div class="toolbar">
+                <button class="btn btn-secondary" onclick="goUp()">⬆️ Lên một cấp</button>
+                <button class="btn" onclick="document.getElementById('fileInput').click()">☁️ Tải tệp lên đây</button>
+                <button class="btn" style="background-color: #10b981;" onclick="createFolder()">📂 Tạo Thư Mục</button>
+                <input type="file" id="fileInput" onchange="uploadFile()">
             </div>
             
-            <table id="fileTable">
-                <thead>
-                    <tr>
-                        <th>Tên Tập Tin</th>
-                        <th>Dung Lượng</th>
-                        <th style="text-align: right;">Hành Động</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+            <div class="file-grid" id="fileList">
+                </div>
         </div>
-
-        <footer class="footer">
-            &copy; 2026 Remote Lamp Project by Vũ. All rights reserved.
-        </footer>
     </main>
 
     <script>
+        let currentDir = "/";
+
         function setStatus(msg, color, bg) {
             const el = document.getElementById('status');
-            el.innerText = msg; el.style.color = color; el.style.background = bg;
+            el.innerText = msg;
+            el.style.color = color;
+            el.style.backgroundColor = bg;
+            el.style.borderColor = color;
         }
 
-        function formatBytes(bytes) {
-            if(bytes === 0) return '0 Bytes';
-            const k = 1024, dm = 2, sizes = ['Bytes', 'KB', 'MB', 'GB'], i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function updateBreadcrumb() {
+            const bc = document.getElementById('breadcrumb');
+            let parts = currentDir.split('/').filter(p => p);
+            let html = `<span onclick="navTo('/')">🏠 SD ROOT</span>`;
+            let path = "";
+            parts.forEach(p => {
+                path += "/" + p;
+                html += ` <span style="color: #64748b;">/</span> <span onclick="navTo('${path}')">${p}</span>`;
+            });
+            bc.innerHTML = html;
+        }
+
+        function navTo(path) {
+            currentDir = path;
+            loadFiles();
+        }
+
+        function goUp() {
+            if (currentDir === "/") return;
+            let parts = currentDir.split('/').filter(p => p);
+            parts.pop();
+            currentDir = parts.length ? "/" + parts.join("/") : "/";
+            loadFiles();
         }
 
         function loadFiles() {
-            fetch('/list').then(r => r.json()).then(data => {
-                const tbody = document.querySelector('#fileTable tbody');
-                tbody.innerHTML = '';
-                if(data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; padding: 30px; color:#64748b;">Chưa có tệp tin nào trên thẻ nhớ!</td></tr>';
-                }
-                data.forEach(f => {
-                    tbody.innerHTML += `<tr>
-                        <td class="filename">📄 ${f.name}</td>
-                        <td class="filesize">${formatBytes(f.size)}</td>
-                        <td>
-                            <div class="action-btns">
-                                <button class="btn-action btn-dl" onclick="window.location.href='/download_file?filename=/${f.name}'">Tải Về</button>
-                                <button class="btn-action btn-del" onclick="deleteFile('/${f.name}')">Xóa</button>
-                            </div>
-                        </td>
-                    </tr>`;
+            setStatus('Đang quét thư mục...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
+            fetch('/list?dir=' + encodeURIComponent(currentDir))
+            .then(r => r.json())
+            .then(data => {
+                // Ưu tiên hiển thị thư mục trước, file sau
+                data.sort((a, b) => {
+                    if (a.isDir === b.isDir) return a.name.localeCompare(b.name);
+                    return a.isDir ? -1 : 1;
                 });
-                setStatus('Đã đồng bộ thẻ nhớ', '#10b981', 'rgba(16, 185, 129, 0.1)');
-            }).catch(() => {
-                setStatus('Lỗi kết nối ESP32!', '#ef4444', 'rgba(239, 68, 68, 0.1)');
+                
+                const list = document.getElementById('fileList');
+                list.innerHTML = '';
+                
+                if (data.length === 0) {
+                    list.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 50px; font-size: 1.2rem;">Thư mục này đang trống</div>';
+                }
+                
+                data.forEach(item => {
+                    const isDir = item.isDir;
+                    const icon = isDir ? '📁' : '📄';
+                    const sizeStr = isDir ? 'Thư mục' : formatSize(item.size);
+                    const path = currentDir === "/" ? "/" + item.name : currentDir + "/" + item.name;
+                    
+                    const clickAction = isDir ? `onclick="navTo('${path}')"` : '';
+                    const hoverStyle = isDir ? 'style="color: #38bdf8;"' : '';
+                    
+                    list.innerHTML += `
+                        <div class="file-card">
+                            <div class="file-info" ${clickAction}>
+                                <div class="file-icon">${icon}</div>
+                                <div class="file-details">
+                                    <div class="file-name" title="${item.name}" ${hoverStyle}>${item.name}</div>
+                                    <div class="file-size">${sizeStr}</div>
+                                </div>
+                            </div>
+                            <div class="file-actions">
+                                <button class="icon-btn" onclick="deleteItem('${path}', ${isDir})" title="Xóa">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                updateBreadcrumb();
+                setStatus('Sẵn sàng', '#10b981', 'rgba(16, 185, 129, 0.1)');
+            })
+            .catch(e => {
+                setStatus('Lỗi đọc thẻ nhớ!', '#ef4444', 'rgba(239, 68, 68, 0.1)');
             });
         }
 
-        function deleteFile(name) {
-            if(!confirm('CẢNH BÁO: Tập tin sẽ bị xóa vĩnh viễn khỏi thẻ nhớ! Bạn có chắc không?')) return;
-            setStatus('Đang xóa...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
+        function createFolder() {
+            const name = prompt("Nhập tên thư mục mới:");
+            if (!name) return;
+            const path = currentDir === "/" ? "/" + name : currentDir + "/" + name;
             
-            const formData = new URLSearchParams(); formData.append('filename', name);
-            fetch('/delete', {method: 'POST', body: formData}).then(r => {
-                if(r.ok) { loadFiles(); } else { setStatus('Lỗi khi xóa!', '#ef4444', 'rgba(239, 68, 68, 0.1)'); }
+            setStatus('Đang tạo...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
+            const formData = new URLSearchParams(); formData.append('path', path);
+            fetch('/mkdir', { method: 'POST', body: formData }).then(r => {
+                if(r.ok) { loadFiles(); } else { setStatus('Tạo thất bại!', '#ef4444', 'rgba(239, 68, 68, 0.1)'); }
+            });
+        }
+
+        function deleteItem(path, isDir) {
+            const msg = isDir ? 'CẢNH BÁO NGUY HIỂM:\nThư mục này và TOÀN BỘ file bên trong sẽ bị xóa vĩnh viễn!\n\nBạn có chắc chắn muốn xóa?' : 'Xóa tệp tin này?';
+            if (!confirm(msg)) return;
+            
+            setStatus('Đang xóa...', '#ef4444', 'rgba(239, 68, 68, 0.1)');
+            const formData = new URLSearchParams(); formData.append('path', path);
+            fetch('/delete', { method: 'POST', body: formData }).then(r => {
+                if(r.ok) { loadFiles(); } else { setStatus('Xóa thất bại!', '#ef4444', 'rgba(239, 68, 68, 0.1)'); }
             });
         }
 
         function uploadFile() {
             const file = document.getElementById('fileInput').files[0];
-            if(!file) return alert('Vui lòng chọn tệp tin cần tải lên!');
+            if (!file) return;
             
-            setStatus('Đang tải lên, không đóng trang...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
-            const formData = new FormData(); formData.append('file', file, file.name);
+            setStatus(`Đang tải lên: ${file.name}...`, '#f59e0b', 'rgba(245, 158, 11, 0.1)');
+            const formData = new FormData(); 
+            formData.append('file', file, file.name);
             
-            fetch('/upload_file', { method: 'POST', body: formData }).then(r => {
-                if(r.ok) {
+            fetch('/upload_file?dir=' + encodeURIComponent(currentDir), { method: 'POST', body: formData })
+            .then(r => {
+                if(r.ok) { 
                     document.getElementById('fileInput').value = '';
-                    loadFiles();
-                } else { setStatus('Lỗi tải lên!', '#ef4444', 'rgba(239, 68, 68, 0.1)'); }
-            }).catch(() => setStatus('Mất kết nối!', '#ef4444', 'rgba(239, 68, 68, 0.1)'));
+                    loadFiles(); 
+                } else { 
+                    setStatus('Lỗi tải lên!', '#ef4444', 'rgba(239, 68, 68, 0.1)'); 
+                }
+            });
         }
 
-        window.onload = loadFiles;
+        function exitServer() {
+            fetch('/exit').then(() => {
+                document.body.innerHTML = '<h1 style="color:#10b981; text-align:center; margin-top:30vh; font-size: 3rem;">✅ Đã ngắt kết nối</h1><p style="color:#94a3b8; text-align:center; font-size: 1.2rem;">Bạn có thể an tâm thao tác trên Remote Lamp.</p>';
+            });
+        }
+
+        // Khởi động load thư mục ROOT
+        loadFiles();
     </script>
 </body>
 </html>

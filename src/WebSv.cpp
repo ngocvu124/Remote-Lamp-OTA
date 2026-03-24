@@ -3,14 +3,47 @@
 #include "Display.h"
 #include "Storage.h"
 #include <WiFi.h>
-#include <WebServer.h>
-#include <LittleFS.h>
 #include <esp_heap_caps.h>
+
+// Xử lý triệt để cảnh báo xung đột Macro giữa SdFat và LittleFS
 #include <SdFat.h>
+#undef FILE_READ
+#undef FILE_WRITE
+#include <LittleFS.h>
+#include <WebServer.h>
 
 WebServerLogic webServer;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern SdFs sd_bg; 
+
+// --- HÀM XÓA ĐỆ QUY THỦ CÔNG CHỐNG LỖI rmRfStar ---
+static bool deleteRecursive(String path) {
+    FsFile target = sd_bg.open(path.c_str(), O_READ);
+    if (!target) return false;
+    
+    if (!target.isDirectory()) {
+        target.close();
+        return sd_bg.remove(path.c_str()); // Nếu là file thì xóa luôn
+    }
+
+    target.rewindDirectory();
+    FsFile child;
+    while (child.openNext(&target, O_READ)) {
+        char name[64];
+        child.getName(name, sizeof(name));
+        child.close();
+        
+        String childPath = path;
+        if (!childPath.endsWith("/")) childPath += "/";
+        childPath += name;
+        
+        deleteRecursive(childPath); // Xóa đệ quy file/thư mục con
+        target.rewindDirectory();   // Cập nhật lại con trỏ do thư mục vừa bị thay đổi
+    }
+    target.close();
+    return sd_bg.rmdir(path.c_str()); // Cuối cùng xóa thư mục đã rỗng
+}
+// ---------------------------------------------------
 
 void WebServerLogic::begin() {
     if (!LittleFS.begin(true)) {
@@ -65,7 +98,6 @@ static void webTask(void* pvParameters) {
             file.close();
         });
 
-        // CÚ CHỐT: Tự động lưu mọi file background vào /background/
         server->on("/upload", HTTP_POST, [server]() {
             server->send(200, "text/plain", "OK");
             Serial.println("[WEB] Upload Finished.");
@@ -131,18 +163,21 @@ static void webTask(void* pvParameters) {
 
         server->on("/list", HTTP_GET, [server]() {
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                String path = server->hasArg("dir") ? server->arg("dir") : "/";
                 String json = "[";
-                FsFile dir = sd_bg.open("/");
-                if (dir) {
+                FsFile dir = sd_bg.open(path.c_str(), O_READ);
+                if (dir && dir.isDirectory()) {
                     FsFile file;
                     bool first = true;
-                    dir.rewind();
+                    dir.rewindDirectory();
                     while (file.openNext(&dir, O_READ)) {
                         char name[64];
                         file.getName(name, sizeof(name));
                         if (String(name) != "System Volume Information") {
                             if (!first) json += ",";
-                            json += "{\"name\":\"" + String(name) + "\",\"size\":" + String(file.size()) + "}";
+                            json += "{\"name\":\"" + String(name) + "\",";
+                            json += "\"isDir\":" + String(file.isDirectory() ? "true" : "false") + ",";
+                            json += "\"size\":" + String(file.size()) + "}";
                             first = false;
                         }
                         file.close();
@@ -157,19 +192,32 @@ static void webTask(void* pvParameters) {
             }
         });
 
-        server->on("/delete", HTTP_POST, [server]() {
-            String filename = server->arg("filename");
-            if (!filename.startsWith("/")) filename = "/" + filename;
-            
+        server->on("/mkdir", HTTP_POST, [server]() {
+            if (!server->hasArg("path")) { server->send(400, "text/plain", "Missing path"); return; }
+            String path = server->arg("path");
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                if (sd_bg.exists(filename.c_str())) {
-                    if (sd_bg.remove(filename.c_str())) {
-                        server->send(200, "text/plain", "OK");
-                    } else {
-                        server->send(500, "text/plain", "Delete Failed");
-                    }
+                if (sd_bg.mkdir(path.c_str())) {
+                    server->send(200, "text/plain", "OK");
                 } else {
-                    server->send(404, "text/plain", "File Not Found");
+                    server->send(500, "text/plain", "Failed");
+                }
+                xSemaphoreGive(xGuiSemaphore);
+            } else {
+                server->send(500, "text/plain", "SD busy");
+            }
+        });
+
+        // NÂNG CẤP TÍCH HỢP HÀM XÓA ĐỆ QUY VỪA TẠO
+        server->on("/delete", HTTP_POST, [server]() {
+            String path = server->hasArg("path") ? server->arg("path") : server->arg("filename");
+            if (!path.startsWith("/")) path = "/" + path;
+            
+            // Cho phép lấy Semaphore lâu hơn một chút vì quá trình xóa đệ quy tốn thời gian
+            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(3000))) {
+                if (deleteRecursive(path)) {
+                    server->send(200, "text/plain", "OK");
+                } else {
+                    server->send(500, "text/plain", "Delete Failed");
                 }
                 xSemaphoreGive(xGuiSemaphore);
             } else {
@@ -183,8 +231,12 @@ static void webTask(void* pvParameters) {
             
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 FsFile file = sd_bg.open(filename.c_str(), O_READ);
-                if (file) {
-                    server->sendHeader("Content-Disposition", "attachment; filename=\"" + filename.substring(1) + "\"");
+                if (file && !file.isDirectory()) { 
+                    String dlName = filename;
+                    int lastSlash = dlName.lastIndexOf('/');
+                    if (lastSlash >= 0) dlName = dlName.substring(lastSlash + 1);
+                    
+                    server->sendHeader("Content-Disposition", "attachment; filename=\"" + dlName + "\"");
                     server->sendHeader("Connection", "close");
                     server->setContentLength(file.size());
                     server->send(200, "application/octet-stream", ""); 
@@ -198,7 +250,7 @@ static void webTask(void* pvParameters) {
                     }
                     file.close();
                 } else {
-                    server->send(404, "text/plain", "File missing");
+                    server->send(404, "text/plain", "File missing or is directory");
                 }
                 xSemaphoreGive(xGuiSemaphore);
             } else {
@@ -211,14 +263,18 @@ static void webTask(void* pvParameters) {
         }, [server]() {
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
-                String filename = upload.filename;
-                if (!filename.startsWith("/")) filename = "/" + filename;
+                String dir = server->hasArg("dir") ? server->arg("dir") : "/";
+                if (!dir.endsWith("/")) dir += "/";
                 
-                Serial.printf("[WEB] Starting General Upload: %s\n", filename.c_str());
+                String filename = upload.filename;
+                if (filename.startsWith("/")) filename = filename.substring(1);
+                String fullPath = dir + filename;
+                
+                Serial.printf("[WEB] Starting General Upload: %s\n", fullPath.c_str());
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
-                    if (sd_bg.exists(filename.c_str())) sd_bg.remove(filename.c_str()); 
-                    uploadFile = sd_bg.open(filename.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+                    if (sd_bg.exists(fullPath.c_str())) sd_bg.remove(fullPath.c_str()); 
+                    uploadFile = sd_bg.open(fullPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
                     xSemaphoreGive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
