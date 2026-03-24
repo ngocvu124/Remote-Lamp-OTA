@@ -50,7 +50,6 @@ void DisplayLogic::begin() {
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, 255);      
 
-    // ĐÃ GỠ BỎ SPI.begin() TẠI ĐÂY
     tft.init(240, 240); 
     tft.setRotation(0); 
     tft.invertDisplay(true);
@@ -88,29 +87,31 @@ void DisplayLogic::loadBackgroundFromSD() {
     if (!file) file = sd_bg.open("/bg.bin", O_READ);
     if (!file) return;
 
-    if (file.size() < 115200) { file.close(); return; }
+    size_t fileSize = file.size();
+    if (fileSize < 100) { file.close(); return; } // Bỏ qua nếu file rỗng
 
     if (bg_data_buffer != NULL) { 
         heap_caps_free(bg_data_buffer); 
         bg_data_buffer = NULL; 
     }
 
-    bg_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    size_t allocSize = (fileSize > 115200) ? 115200 : fileSize;
+    bg_data_buffer = (uint8_t*)heap_caps_malloc(allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     
     if (bg_data_buffer) {
         size_t totalRead = 0;
-        while (totalRead < 115200) {
+        while (totalRead < allocSize) {
             int r = file.read(bg_data_buffer + totalRead, 4096);
             if (r <= 0) break;
             totalRead += r;
         }
 
-        if (totalRead >= 115200) {
+        if (totalRead > 0) { // CÚ CHỐT: Đọc được bao nhiêu vẽ bấy nhiêu
             custom_bg.header.always_zero = 0;
             custom_bg.header.w = 240;
             custom_bg.header.h = 240;
             custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
-            custom_bg.data_size = 115200;
+            custom_bg.data_size = totalRead;
             custom_bg.data = bg_data_buffer;
             
             lv_img_cache_invalidate_src(NULL);
@@ -338,28 +339,33 @@ void DisplayLogic::closeProgressPopup() {
 bool DisplayLogic::showImagePreview(FsFile& file) {
     if(!file) return false;
     
+    size_t fileSize = file.size();
+    if (fileSize < 100) return false;
+
     if (!scr_image_preview) {
         scr_image_preview = lv_obj_create(NULL);
         lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
     }
 
     if (preview_data_buffer != NULL) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
-    preview_data_buffer = (uint8_t*)heap_caps_malloc(115200, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    
+    size_t allocSize = (fileSize > 115200) ? 115200 : fileSize;
+    preview_data_buffer = (uint8_t*)heap_caps_malloc(allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!preview_data_buffer) return false;
 
     size_t totalRead = 0;
-    while (totalRead < 115200) {
+    while (totalRead < allocSize) {
         int r = file.read(preview_data_buffer + totalRead, 4096);
         if (r <= 0) break;
         totalRead += r;
     }
     
-    if (totalRead >= 115200) {
+    if (totalRead > 0) { // CÚ CHỐT: Cho phép ảnh có dung lượng biến đổi
         preview_img_dsc.header.always_zero = 0;
         preview_img_dsc.header.w = 240;
         preview_img_dsc.header.h = 240;
         preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-        preview_img_dsc.data_size = 115200;
+        preview_img_dsc.data_size = totalRead;
         preview_img_dsc.data = preview_data_buffer;
 
         lv_img_cache_invalidate_src(NULL);

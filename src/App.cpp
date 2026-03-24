@@ -27,7 +27,6 @@ static int selectedOtaIndex = -1;
 static bool pendingImageLoad = false;
 static uint32_t lastScrollTime = 0;
 
-// --- CÚ CHỐT: Hàm ép thẻ nhớ tỉnh dậy dành riêng cho App.cpp ---
 static FsFile openSDFallback(const char* path) {
     pinMode(SCR_CS_PIN, OUTPUT);
     digitalWrite(SCR_CS_PIN, HIGH);
@@ -117,8 +116,6 @@ void AppLogic::begin() {
         encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
         display.updateUI(appState);
         xSemaphoreGive(xGuiSemaphore);
-    } else {
-        Serial.println("[APP-ERR] Failed to take GUI Semaphore in begin()");
     }
 }
 
@@ -184,10 +181,7 @@ void AppLogic::handleEvents() {
                 }
             }
             else {
-                int oldIndex = appState.menuIndex;
                 appState.menuIndex = encoder.getEncoderValue(); 
-                Serial.printf("[APP] Encoder scrolled. Old: %d, New: %d, Menu: %d\n", oldIndex, appState.menuIndex, appState.currentMenu);
-                
                 if (appState.currentMenu == MENU_STOCK) appState.stockIndex = appState.menuIndex;
 
                 if (isViewingImage && appState.currentMenu == MENU_SELECT_BG) {
@@ -207,7 +201,6 @@ void AppLogic::handleEvents() {
         }
 
         if (event == ENC_CLICK) {
-            Serial.printf("[APP] Event: ENC_CLICK. menuIndex: %d\n", appState.menuIndex);
             if ((isViewingFile || isViewingImage) && appState.currentMenu != MENU_SELECT_BG) {
                 isViewingFile = false;
                 isViewingImage = false;
@@ -262,7 +255,7 @@ void AppLogic::handleEvents() {
                             if (isViewingImage) {
                                 pendingImageLoad = false; 
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
-                                storage.saveConfig(appState); // Hàm này đã có sẵn wakeupSD() bên trong
+                                storage.saveConfig(appState); 
                                 Serial.printf("[APP] Applied new BG: %s\n", fullPath);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     display.closeImagePreview();
@@ -274,12 +267,14 @@ void AppLogic::handleEvents() {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    FsFile file = openSDFallback(fullPath); // Dùng hàm mới!
+                                    FsFile file = openSDFallback(fullPath); 
                                     if (file) {
-                                        if (display.showImagePreview(file)) isViewingImage = true;
+                                        // ĐÃ FIX: Nhận chính xác lệnh trả về để đổi cờ Preview
+                                        if (display.showImagePreview(file)) {
+                                            isViewingImage = true;
+                                            Serial.println("[APP] Preview SUCCESS!");
+                                        }
                                         file.close();
-                                    } else {
-                                        Serial.println("[APP-ERR] Could not open file for preview.");
                                     }
                                     xSemaphoreGive(xGuiSemaphore);
                                 }
@@ -292,7 +287,7 @@ void AppLogic::handleEvents() {
                             char* fName = storage.fileNames[appState.menuIndex];
                             if (strstr(fName, ".bin")) {
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    FsFile file = openSDFallback(fName); // Dùng hàm mới!
+                                    FsFile file = openSDFallback(fName); 
                                     if(file) { if (display.showImagePreview(file)) isViewingImage = true; file.close(); }
                                     xSemaphoreGive(xGuiSemaphore);
                                 }
@@ -326,15 +321,12 @@ void AppLogic::handleEvents() {
         pendingImageLoad = false;
         char fullPath[64];
         snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
-        Serial.printf("[APP] Previewing image on scroll: %s\n", fullPath);
         
         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-            FsFile file = openSDFallback(fullPath); // Dùng hàm mới!
+            FsFile file = openSDFallback(fullPath); 
             if (file) {
                 display.showImagePreview(file);
                 file.close();
-            } else {
-                Serial.println("[APP-ERR] Failed to open image for preview on scroll!");
             }
             xSemaphoreGive(xGuiSemaphore);
         }
@@ -351,7 +343,6 @@ void AppLogic::handleEvents() {
 }
 
 void AppLogic::enterMenu(int level) {
-    Serial.printf("\n[APP] ---> enterMenu(%d)\n", level);
     appState.currentMenu = (MenuLevel)level;
     appState.menuIndex = 0;
     
@@ -377,20 +368,16 @@ void AppLogic::enterMenu(int level) {
         encoder.setBoundaries(0, 4, true); 
     } 
     else if (level == MENU_USB_MODE) { 
-        Serial.println("[APP] Waiting for Semaphore to load USB files...");
         if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
             storage.loadFiles(); 
             xSemaphoreGive(xGuiSemaphore);
-            Serial.printf("[APP] Loaded %d files for USB_MODE\n", storage.fileCount);
         }
         encoder.setBoundaries(0, storage.fileCount, true); 
     } 
     else if (level == MENU_SELECT_BG) { 
-        Serial.println("[APP] Waiting for Semaphore to load BG files...");
         if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
             storage.loadBgFiles(); 
             xSemaphoreGive(xGuiSemaphore);
-            Serial.printf("[APP] Loaded %d files for SELECT_BG\n", storage.bgFileCount);
         }
         encoder.setBoundaries(0, storage.bgFileCount, true); 
     } 
@@ -400,7 +387,6 @@ void AppLogic::enterMenu(int level) {
 }
 
 void AppLogic::exitMenu() {
-    Serial.println("[APP] <--- exitMenu()");
     if (appState.currentMenu == MENU_STOCK || appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 
