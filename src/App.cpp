@@ -116,6 +116,8 @@ void AppLogic::begin() {
         encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
         display.updateUI(appState);
         xSemaphoreGive(xGuiSemaphore);
+    } else {
+        Serial.println("[APP-ERR] Failed to take GUI Semaphore in begin()");
     }
 }
 
@@ -138,8 +140,13 @@ void AppLogic::handleEvents() {
                     display.closeImagePreview(); 
                     xSemaphoreGive(xGuiSemaphore);
                 }
-                encoder.setEncoderValue(appState.menuIndex);
-                if (appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) exitMenu();
+                if (appState.currentMenu == MENU_ABOUT) {
+                    enterMenu(MENU_CONTROL);
+                    encoder.setEncoderValue(4); 
+                } else {
+                    encoder.setEncoderValue(appState.menuIndex);
+                    if (appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) exitMenu();
+                }
             } else {
                 if (appState.currentMenu == MENU_NONE) enterMenu(MENU_MAIN);
                 else exitMenu();
@@ -201,6 +208,7 @@ void AppLogic::handleEvents() {
         }
 
         if (event == ENC_CLICK) {
+            Serial.printf("[APP] Event: ENC_CLICK. menuIndex: %d\n", appState.menuIndex);
             if ((isViewingFile || isViewingImage) && appState.currentMenu != MENU_SELECT_BG) {
                 isViewingFile = false;
                 isViewingImage = false;
@@ -210,16 +218,20 @@ void AppLogic::handleEvents() {
                     display.closeImagePreview();
                     xSemaphoreGive(xGuiSemaphore);
                 }
-                encoder.setEncoderValue(appState.menuIndex); 
+                if (appState.currentMenu == MENU_ABOUT) {
+                    enterMenu(MENU_CONTROL);
+                    encoder.setEncoderValue(4); 
+                } else {
+                    encoder.setEncoderValue(appState.menuIndex); 
+                }
             } else {
                 switch (appState.currentMenu) {
                     case MENU_MAIN:
                         if (appState.menuIndex == 0) enterMenu(MENU_CONTROL);
                         else if (appState.menuIndex == 1) enterMenu(MENU_LAMP);
-                        else if (appState.menuIndex == 2) enterMenu(MENU_USB_MODE); 
-                        else if (appState.menuIndex == 3) enterMenu(MENU_STOCK);
-                        else if (appState.menuIndex == 4) enterMenu(MENU_OTA); 
-                        else if (appState.menuIndex == 5) enterMenu(MENU_WEB_SERVER); 
+                        else if (appState.menuIndex == 2) enterMenu(MENU_STOCK);
+                        else if (appState.menuIndex == 3) enterMenu(MENU_OTA); 
+                        else if (appState.menuIndex == 4) enterMenu(MENU_WEB_SERVER); 
                         else exitMenu(); 
                         break;
                     case MENU_CONTROL:
@@ -234,6 +246,7 @@ void AppLogic::handleEvents() {
                             vTaskDelay(pdMS_TO_TICKS(2000)); ESP.restart(); 
                         }
                         else if (appState.menuIndex == 3) enterMenu(MENU_SELECT_BG); 
+                        else if (appState.menuIndex == 4) enterMenu(MENU_ABOUT);
                         else enterMenu(MENU_MAIN);
                         break;
                     case MENU_SET_SLEEP:         
@@ -269,32 +282,12 @@ void AppLogic::handleEvents() {
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     FsFile file = openSDFallback(fullPath); 
                                     if (file) {
-                                        // ĐÃ FIX: Nhận chính xác lệnh trả về để đổi cờ Preview
                                         if (display.showImagePreview(file)) {
                                             isViewingImage = true;
                                             Serial.println("[APP] Preview SUCCESS!");
                                         }
                                         file.close();
                                     }
-                                    xSemaphoreGive(xGuiSemaphore);
-                                }
-                            }
-                        }
-                        break;
-                    case MENU_USB_MODE:
-                        if (appState.menuIndex == storage.fileCount) enterMenu(MENU_MAIN); 
-                        else {
-                            char* fName = storage.fileNames[appState.menuIndex];
-                            if (strstr(fName, ".bin")) {
-                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    FsFile file = openSDFallback(fName); 
-                                    if(file) { if (display.showImagePreview(file)) isViewingImage = true; file.close(); }
-                                    xSemaphoreGive(xGuiSemaphore);
-                                }
-                            } else {
-                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    isViewingFile = true;
-                                    display.showFileContent(fName, storage.readFileToPSRAM(fName));
                                     xSemaphoreGive(xGuiSemaphore);
                                 }
                             }
@@ -321,6 +314,7 @@ void AppLogic::handleEvents() {
         pendingImageLoad = false;
         char fullPath[64];
         snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
+        Serial.printf("[APP] Previewing image on scroll: %s\n", fullPath);
         
         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
             FsFile file = openSDFallback(fullPath); 
@@ -343,6 +337,7 @@ void AppLogic::handleEvents() {
 }
 
 void AppLogic::enterMenu(int level) {
+    Serial.printf("\n[APP] ---> enterMenu(%d)\n", level);
     appState.currentMenu = (MenuLevel)level;
     appState.menuIndex = 0;
     
@@ -362,17 +357,42 @@ void AppLogic::enterMenu(int level) {
     }
     
     if (level == MENU_MAIN) {
-        encoder.setBoundaries(0, 6, true);         
+        encoder.setBoundaries(0, 5, true);         
     } 
     else if (level == MENU_CONTROL) {
-        encoder.setBoundaries(0, 4, true); 
+        encoder.setBoundaries(0, 5, true); 
     } 
-    else if (level == MENU_USB_MODE) { 
-        if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
-            storage.loadFiles(); 
-            xSemaphoreGive(xGuiSemaphore);
+    else if (level == MENU_ABOUT) { 
+        char* about_text = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (about_text) {
+            String ip = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "Chưa kết nối";
+            String ssid = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "Trống";
+            sprintf(about_text,
+                "Author: Ngoc Vu\n"
+                "Firmware: %s\n"
+                "-------------------\n"
+                "WiFi: %s\n"
+                "IP: %s\n"
+                "-------------------\n"
+                "Sleep Time: %ds\n"
+                "Backlight: %d%%\n"
+                "Lamp Bright: %d%%\n"
+                "Lamp Temp: %d%%",
+                FIRMWARE_VERSION,
+                ssid.c_str(),
+                ip.c_str(),
+                appState.sleepTimeout,
+                appState.oledBrightness,
+                appState.brightness,
+                appState.temperature
+            );
+            if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+                isViewingFile = true;
+                display.showFileContent("ABOUT", about_text);
+                xSemaphoreGive(xGuiSemaphore);
+            }
         }
-        encoder.setBoundaries(0, storage.fileCount, true); 
+        encoder.setBoundaries(0, 0, false); 
     } 
     else if (level == MENU_SELECT_BG) { 
         if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
@@ -387,6 +407,7 @@ void AppLogic::enterMenu(int level) {
 }
 
 void AppLogic::exitMenu() {
+    Serial.println("[APP] <--- exitMenu()");
     if (appState.currentMenu == MENU_STOCK || appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 

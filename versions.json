@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.5.0.0 (Add About Device)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.5.0.0.bin"
+  },
+  {
     "name": "v1.4.0.1 (Add file explore function)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.4.0.1.bin"
   },

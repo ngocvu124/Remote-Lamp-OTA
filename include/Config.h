@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.4.0.1"
-#define FIRMWARE_NAME "Add file explore function"
+#define FIRMWARE_VERSION "v1.5.0.0"
+#define FIRMWARE_NAME "Add About Device"
 
 // --- CẤU HÌNH KẾT NỐI ESP-NOW ---
 #define WIFI_CHANNEL 6 
@@ -29,11 +29,18 @@ const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
 #define PIN_BATTERY     14
 #define ROTARY_STEPS    4
 
-// --- CẤU HÌNH TASK (STACK & PRIORITY) ---
-#define STACK_GUI       32768
-#define STACK_NETWORK   32768  
+// --- CẤU HÌNH ĐỌC PIN ---
+#define BAT_CALIBRATION_FACTOR 1.0 
+#define BAT_SAMPLES 20             
+
+// --- CẤU HÌNH GIAO DIỆN & TÁC VỤ ---
+#define SCREEN_WIDTH    240
+#define SCREEN_HEIGHT   240
+
+#define STACK_GUI       8192  
+#define STACK_NETWORK   8192  
 #define STACK_SYSTEM    16384
-#define STACK_WEB       8192  
+#define STACK_WEB       16384  
 
 #define PRIO_INPUT      5     
 #define PRIO_GUI        4
@@ -58,7 +65,7 @@ typedef struct struct_message {
   char sysCmd;
 } struct_message;
 
-// CÚ CHỐT: Danh sách các Menu
+// CÚ CHỐT: Danh sách các Menu (Đã thay USB_MODE thành ABOUT)
 enum MenuLevel {
     MENU_NONE = 0,
     MENU_MAIN = 1,
@@ -66,7 +73,7 @@ enum MenuLevel {
     MENU_LAMP = 3,
     MENU_SET_SLEEP = 4,
     MENU_SET_BACKLIGHT = 5,
-    MENU_USB_MODE = 6,
+    MENU_ABOUT = 6, 
     MENU_STOCK = 7,
     MENU_OTA = 8,
     MENU_WEB_SERVER = 9,
@@ -77,26 +84,16 @@ struct RemoteState {
     int brightness = 50;
     int temperature = 50;
     bool isTempMode = false;
+    
+    int sleepTimeout = 60; 
+    int oledBrightness = 50; 
+    
     MenuLevel currentMenu = MENU_NONE;
     int menuIndex = 0;
-    int batteryLevel = 0;
-    float batteryVoltage = 0.0;
-    int sleepTimeout = 30;
-    int oledBrightness = 50;
     int stockIndex = 0;
-    char bgFilePath[64] = "/background/bg.bin";
+    
+    int batteryLevel = 100;
+    char bgFilePath[64] = "/bg.bin";
 };
-
-#define SCREEN_WIDTH    240 
-#define SCREEN_HEIGHT   240
-#define BAT_MIN 3.3
-#define BAT_MAX 4.2
-#define BAT_CALIBRATION_FACTOR 1.265
-#define BAT_SAMPLES 20
-
-extern RemoteState appState; 
-extern SemaphoreHandle_t xGuiSemaphore;
-extern QueueHandle_t xEncoderQueue;
-extern QueueHandle_t xEspNowQueue; 
 
 #endif

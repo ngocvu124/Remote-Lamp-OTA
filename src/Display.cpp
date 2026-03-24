@@ -5,6 +5,7 @@
 #include "Ota.h" 
 #include <esp_heap_caps.h>
 #include <SdFat.h> 
+#include "System.h"
 
 Adafruit_ST7789 tft = Adafruit_ST7789(&SPI, SCR_CS_PIN, SCR_DC_PIN, SCR_RST_PIN);
 DisplayLogic display;
@@ -24,8 +25,9 @@ static lv_obj_t* g_menuBtns[30];
 
 #define BACKLIGHT_CHANNEL 0 
 
-const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. SD Explorer", "4. Stock Monitor", "5. OTA Update", "6. Web Server", "7. Exit"}; 
-const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. Back"}; 
+// ĐÃ CẬP NHẬT CẤU TRÚC TEXT MENU MỚI
+const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. Stock Monitor", "4. OTA Update", "5. Web Server", "6. Exit"}; 
+const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
 
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -44,7 +46,7 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 }
 
 void DisplayLogic::begin() {
-    Serial.println("[DISPLAY] Initializing ST7789 (240x240)...");
+    Serial.println("[DISPLAY] Initializing ST7789...");
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
@@ -100,13 +102,12 @@ void DisplayLogic::loadBackgroundFromSD() {
     
     if (bg_data_buffer) {
         size_t totalRead = 0;
-        // CÚ CHỐT: Tạo trạm trung chuyển SRAM nội bộ để tránh lỗi nhiễu DMA PSRAM
         uint8_t temp_buf[2048]; 
         while (totalRead < allocSize) {
             size_t toRead = (allocSize - totalRead > 2048) ? 2048 : (allocSize - totalRead);
             int r = file.read(temp_buf, toRead);
             if (r <= 0) break;
-            memcpy(bg_data_buffer + totalRead, temp_buf, r); // CPU tự chép tay an toàn tuyệt đối
+            memcpy(bg_data_buffer + totalRead, temp_buf, r); 
             totalRead += r;
         }
 
@@ -204,23 +205,19 @@ void DisplayLogic::updateUI(RemoteState &state) {
 
         if (state.currentMenu != lastMenuType) {
             if (state.currentMenu == MENU_MAIN) {
-                lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 7); 
+                lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 6); 
             } 
             else if (state.currentMenu == MENU_CONTROL) {
-                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 5); 
+                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 6); 
             }
             else if (state.currentMenu == MENU_LAMP) {
                 lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 5);
             }
-            else if (state.currentMenu == MENU_USB_MODE || state.currentMenu == MENU_OTA || state.currentMenu == MENU_SELECT_BG) {
+            else if (state.currentMenu == MENU_OTA || state.currentMenu == MENU_SELECT_BG) {
                 const char* items[30]; 
                 int count = 0;
                 
-                if (state.currentMenu == MENU_USB_MODE) {
-                    lv_label_set_text(objects.label_menu, "SD Card Files"); 
-                    for (int i = 0; i < storage.fileCount; i++) items[i] = storage.fileNames[i];
-                    count = storage.fileCount;
-                } else if (state.currentMenu == MENU_OTA) {
+                if (state.currentMenu == MENU_OTA) {
                     lv_label_set_text(objects.label_menu, "Select Version");
                     for (int i = 0; i < ota.versionCount && i < 14; i++) items[i] = ota.versions[i].name;
                     count = ota.versionCount;
@@ -358,13 +355,12 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     if (!preview_data_buffer) return false;
 
     size_t totalRead = 0;
-    // CÚ CHỐT SỬA LỖI NHIỄU ẢNH CHO CHẾ ĐỘ PREVIEW
     uint8_t temp_buf[2048]; 
     while (totalRead < allocSize) {
         size_t toRead = (allocSize - totalRead > 2048) ? 2048 : (allocSize - totalRead);
         int r = file.read(temp_buf, toRead);
         if (r <= 0) break;
-        memcpy(preview_data_buffer + totalRead, temp_buf, r); // CPU tự chép tay an toàn
+        memcpy(preview_data_buffer + totalRead, temp_buf, r); 
         totalRead += r;
     }
     
