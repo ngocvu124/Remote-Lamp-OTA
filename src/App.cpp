@@ -365,22 +365,22 @@ void AppLogic::enterMenu(int level) {
     else if (level == MENU_ABOUT) { 
         char* about_text = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (about_text) {
-            String ip = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "Chưa kết nối";
-            String ssid = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "Trống";
+            WiFi.mode(WIFI_STA); 
+            String savedSSID = WiFi.SSID();
+            if (savedSSID.length() == 0) savedSSID = "Not configured";
+            
             sprintf(about_text,
                 "Author: Ngoc Vu\n"
                 "Firmware: %s\n"
                 "-------------------\n"
                 "WiFi: %s\n"
-                "IP: %s\n"
                 "-------------------\n"
                 "Sleep Time: %ds\n"
                 "Backlight: %d%%\n"
                 "Lamp Bright: %d%%\n"
                 "Lamp Temp: %d%%",
                 FIRMWARE_VERSION,
-                ssid.c_str(),
-                ip.c_str(),
+                savedSSID.c_str(),
                 appState.sleepTimeout,
                 appState.oledBrightness,
                 appState.brightness,
