@@ -5,14 +5,9 @@
 StorageLogic storage;
 extern SdFs sd_bg; 
 
-// --- CÚ CHỐT: HÀM TÁT THẺ NHỚ TỈNH DẬY ---
-// Bất cứ khi nào nghi ngờ thẻ nhớ bị màn hình làm nhiễu đơ ngang, gọi hàm này!
 static void wakeupSD() {
-    // Khóa mõm màn hình lại để nó không nghe lén tín hiệu
     pinMode(SCR_CS_PIN, OUTPUT);
     digitalWrite(SCR_CS_PIN, HIGH);
-    
-    // Ép khởi tạo lại thẻ nhớ ở tốc độ 4MHz (Chậm mà chắc, tuyệt đối không bao giờ rớt tín hiệu)
     sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
 }
 
@@ -39,7 +34,7 @@ void StorageLogic::begin() {
 
 void StorageLogic::loadFiles() {
     if (!isReady) return;
-    wakeupSD(); // Ép thức tỉnh SD Card trước khi mở Explorer
+    wakeupSD(); 
     
     fileCount = 0;
     FsFile dir = sd_bg.open("/", O_READ); 
@@ -48,10 +43,10 @@ void StorageLogic::loadFiles() {
     
     while (fileCount < 15) {
         FsFile file = dir.openNextFile();
-        if (!file) break; // Nhờ wakeupSD(), nếu có file chắc chắn nó sẽ đọc được qua đoạn này
+        if (!file) break; 
         if (!file.isDirectory()) {
             file.getName(fileNames[fileCount], 32);
-            fileCount++; // Hiện toàn bộ file, kể cả config.json để bạn thấy
+            fileCount++; 
         }
         file.close();
     }
@@ -61,7 +56,7 @@ void StorageLogic::loadFiles() {
 
 void StorageLogic::loadBgFiles() {
     if (!isReady) return;
-    wakeupSD(); // Ép thức tỉnh SD Card trước khi chọn Background
+    wakeupSD(); 
     
     bgFileCount = 0;
     FsFile dir = sd_bg.open("/background", O_READ); 
@@ -83,7 +78,7 @@ void StorageLogic::loadBgFiles() {
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
     if (!isReady) return NULL;
-    wakeupSD(); // Ép thức tỉnh trước khi bơm file Text ra màn hình
+    wakeupSD(); 
     
     FsFile file = sd_bg.open(filename, O_READ);
     if (!file) return NULL;
@@ -96,8 +91,16 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
 
     char* buffer = (char*)heap_caps_malloc(fileSize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (buffer) {
-        size_t readSize = file.read(buffer, fileSize);
-        buffer[readSize] = '\0'; 
+        size_t totalRead = 0;
+        char temp_buf[1024]; // Trạm trung chuyển chống lỗi DMA PSRAM
+        while (totalRead < fileSize) {
+            size_t toRead = (fileSize - totalRead > 1024) ? 1024 : (fileSize - totalRead);
+            int r = file.read(temp_buf, toRead);
+            if (r <= 0) break;
+            memcpy(buffer + totalRead, temp_buf, r);
+            totalRead += r;
+        }
+        buffer[totalRead] = '\0'; 
     }
     file.close();
     return buffer;
@@ -109,7 +112,7 @@ void StorageLogic::freePSRAMBuffer(char* buffer) {
 
 void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;
-    wakeupSD(); // Ép thức tỉnh trước khi ghi file
+    wakeupSD(); 
     
     FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {

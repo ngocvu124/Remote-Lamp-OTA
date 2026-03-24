@@ -88,7 +88,7 @@ void DisplayLogic::loadBackgroundFromSD() {
     if (!file) return;
 
     size_t fileSize = file.size();
-    if (fileSize < 100) { file.close(); return; } // Bỏ qua nếu file rỗng
+    if (fileSize < 100) { file.close(); return; } 
 
     if (bg_data_buffer != NULL) { 
         heap_caps_free(bg_data_buffer); 
@@ -100,13 +100,17 @@ void DisplayLogic::loadBackgroundFromSD() {
     
     if (bg_data_buffer) {
         size_t totalRead = 0;
+        // CÚ CHỐT: Tạo trạm trung chuyển SRAM nội bộ để tránh lỗi nhiễu DMA PSRAM
+        uint8_t temp_buf[2048]; 
         while (totalRead < allocSize) {
-            int r = file.read(bg_data_buffer + totalRead, 4096);
+            size_t toRead = (allocSize - totalRead > 2048) ? 2048 : (allocSize - totalRead);
+            int r = file.read(temp_buf, toRead);
             if (r <= 0) break;
+            memcpy(bg_data_buffer + totalRead, temp_buf, r); // CPU tự chép tay an toàn tuyệt đối
             totalRead += r;
         }
 
-        if (totalRead > 0) { // CÚ CHỐT: Đọc được bao nhiêu vẽ bấy nhiêu
+        if (totalRead > 0) { 
             custom_bg.header.always_zero = 0;
             custom_bg.header.w = 240;
             custom_bg.header.h = 240;
@@ -354,13 +358,17 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     if (!preview_data_buffer) return false;
 
     size_t totalRead = 0;
+    // CÚ CHỐT SỬA LỖI NHIỄU ẢNH CHO CHẾ ĐỘ PREVIEW
+    uint8_t temp_buf[2048]; 
     while (totalRead < allocSize) {
-        int r = file.read(preview_data_buffer + totalRead, 4096);
+        size_t toRead = (allocSize - totalRead > 2048) ? 2048 : (allocSize - totalRead);
+        int r = file.read(temp_buf, toRead);
         if (r <= 0) break;
+        memcpy(preview_data_buffer + totalRead, temp_buf, r); // CPU tự chép tay an toàn
         totalRead += r;
     }
     
-    if (totalRead > 0) { // CÚ CHỐT: Cho phép ảnh có dung lượng biến đổi
+    if (totalRead > 0) { 
         preview_img_dsc.header.always_zero = 0;
         preview_img_dsc.header.w = 240;
         preview_img_dsc.header.h = 240;
