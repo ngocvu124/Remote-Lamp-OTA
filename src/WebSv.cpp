@@ -16,8 +16,8 @@ WebServerLogic webServer;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern SdFs sd_bg; 
 
-// --- HÀM XÓA ĐỆ QUY THỦ CÔNG CHỐNG LỖI rmRfStar ---
-static bool deleteRecursive(String path) {
+// --- HÀM XÓA ĐỆ QUY CHỐNG LẶP VÔ HẠN VÀ TRÀN STACK ---
+static bool deleteRecursive(const String& path) {
     FsFile target = sd_bg.open(path.c_str(), O_READ);
     if (!target) return false;
     
@@ -28,20 +28,40 @@ static bool deleteRecursive(String path) {
 
     target.rewindDirectory();
     FsFile child;
+    bool success = true;
+
+    // Quét từng file trong thư mục
     while (child.openNext(&target, O_READ)) {
-        char name[64];
+        char name[128];
         child.getName(name, sizeof(name));
+        bool isDir = child.isDirectory();
         child.close();
         
         String childPath = path;
         if (!childPath.endsWith("/")) childPath += "/";
         childPath += name;
         
-        deleteRecursive(childPath); // Xóa đệ quy file/thư mục con
-        target.rewindDirectory();   // Cập nhật lại con trỏ do thư mục vừa bị thay đổi
+        if (isDir) {
+            // Đệ quy vào thư mục con, nếu lỗi thì ngắt vòng lặp ngay
+            if (!deleteRecursive(childPath)) {
+                success = false;
+                break;
+            }
+        } else {
+            // Xóa file, nếu lỗi (file hỏng/khóa) thì ngắt vòng lặp để chống treo
+            if (!sd_bg.remove(childPath.c_str())) {
+                success = false;
+                break;
+            }
+        }
+        target.rewindDirectory(); // Đã xóa 1 phần tử nên phải quay lại đầu
     }
     target.close();
-    return sd_bg.rmdir(path.c_str()); // Cuối cùng xóa thư mục đã rỗng
+    
+    if (success) {
+        return sd_bg.rmdir(path.c_str()); // Cuối cùng xóa thư mục mẹ đã rỗng
+    }
+    return false;
 }
 // ---------------------------------------------------
 
@@ -207,13 +227,12 @@ static void webTask(void* pvParameters) {
             }
         });
 
-        // NÂNG CẤP TÍCH HỢP HÀM XÓA ĐỆ QUY VỪA TẠO
+        // BẢO VỆ XÓA ĐỆ QUY TỐI ĐA VỚI portMAX_DELAY ĐỂ CHỐNG VỠ GIAO DỊCH
         server->on("/delete", HTTP_POST, [server]() {
             String path = server->hasArg("path") ? server->arg("path") : server->arg("filename");
             if (!path.startsWith("/")) path = "/" + path;
             
-            // Cho phép lấy Semaphore lâu hơn một chút vì quá trình xóa đệ quy tốn thời gian
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(3000))) {
+            if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
                 if (deleteRecursive(path)) {
                     server->send(200, "text/plain", "OK");
                 } else {
@@ -325,7 +344,8 @@ bool WebServerLogic::runWiFiSetup() {
     if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_AP_STA);
     isRunning = true;
-    xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
+    // Bơm 16KB Stack cho WebTask thay vì chỉ 8KB như cũ
+    xTaskCreatePinnedToCore(webTask, "WebTask", 16384, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
     while (isRunning) vTaskDelay(pdMS_TO_TICKS(100));
     return WiFi.status() == WL_CONNECTED;
 }
@@ -341,5 +361,6 @@ void WebServerLogic::runBgUpload() {
         xSemaphoreGive(xGuiSemaphore);
     }
     isRunning = true;
-    xTaskCreatePinnedToCore(webTask, "WebTask", STACK_WEB, (void*)WEB_MODE_UPLOAD, PRIO_WEB, NULL, 1);
+    // Bơm 16KB Stack cho WebTask chống tràn bộ nhớ
+    xTaskCreatePinnedToCore(webTask, "WebTask", 16384, (void*)WEB_MODE_UPLOAD, PRIO_WEB, NULL, 1);
 }
