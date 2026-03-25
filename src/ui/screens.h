@@ -14,18 +14,20 @@ enum ScreensEnum {
     SCREEN_ID_MAIN = 1,
     SCREEN_ID_MENU = 2,
     SCREEN_ID_STOCK = 3,
-    _SCREEN_ID_LAST = 3
+    SCREEN_ID_U = 4,
+    _SCREEN_ID_LAST = 4
 };
 
 typedef struct _objects_t {
     lv_obj_t *main;
     lv_obj_t *menu;
     lv_obj_t *stock;
+    lv_obj_t *u;
     lv_obj_t *ui_batbar;
     lv_obj_t *bat_value;
-    lv_obj_t *arc_value;
     lv_obj_t *label_value;
     lv_obj_t *value;
+    lv_obj_t *arc_value;
     lv_obj_t *cont_menu;
     lv_obj_t *label_menu;
     lv_obj_t *cont_menu_text;
@@ -54,6 +56,9 @@ void tick_screen_menu();
 
 void create_screen_stock();
 void tick_screen_stock();
+
+void create_screen_u();
+void tick_screen_u();
 
 void tick_screen_by_id(enum ScreensEnum screenId);
 void tick_screen(int screen_index);

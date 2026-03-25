@@ -53,19 +53,25 @@ void create_screen_main() {
                     // ui_batbar
                     lv_obj_t *obj = lv_bar_create(parent_obj);
                     objects.ui_batbar = obj;
-                    lv_obj_set_pos(obj, 207, 5);
+                    lv_obj_set_pos(obj, 203, 5);
                     lv_obj_set_size(obj, 30, 15);
                     lv_bar_set_value(obj, 25, LV_ANIM_OFF);
                     lv_obj_set_style_border_color(obj, lv_color_hex(0xffffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_border_width(obj, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_bg_color(obj, lv_color_hex(0xff4cb000), LV_PART_MAIN | LV_STATE_DEFAULT);
-                    lv_obj_set_style_bg_grad_color(obj, lv_color_hex(0xffc24949), LV_PART_MAIN | LV_STATE_DEFAULT);
+                    lv_obj_set_style_radius(obj, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
+                }
+                {
+                    lv_obj_t *obj = lv_obj_create(parent_obj);
+                    lv_obj_set_pos(obj, 232, 8);
+                    lv_obj_set_size(obj, 3, 9);
+                    lv_obj_set_style_border_width(obj, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
                 }
                 {
                     // bat_value
                     lv_obj_t *obj = lv_label_create(parent_obj);
                     objects.bat_value = obj;
-                    lv_obj_set_pos(obj, 172, 5);
+                    lv_obj_set_pos(obj, 169, 5);
                     lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
                     lv_obj_set_style_text_color(obj, lv_color_hex(0xffffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_label_set_text(obj, "6%");
@@ -91,16 +97,6 @@ void create_screen_main() {
             {
                 lv_obj_t *parent_obj = obj;
                 {
-                    // arc_value
-                    lv_obj_t *obj = lv_arc_create(parent_obj);
-                    objects.arc_value = obj;
-                    lv_obj_set_pos(obj, 40, 54);
-                    lv_obj_set_size(obj, 160, 160);
-                    lv_arc_set_value(obj, 50);
-                    lv_obj_set_style_bg_color(obj, lv_color_hex(0xffffffff), LV_PART_KNOB | LV_STATE_DEFAULT);
-                    lv_obj_set_style_bg_opa(obj, 0, LV_PART_KNOB | LV_STATE_DEFAULT);
-                }
-                {
                     // label_value
                     lv_obj_t *obj = lv_label_create(parent_obj);
                     objects.label_value = obj;
@@ -115,12 +111,20 @@ void create_screen_main() {
                     // value
                     lv_obj_t *obj = lv_label_create(parent_obj);
                     objects.value = obj;
-                    lv_obj_set_pos(obj, 40, 114);
-                    lv_obj_set_size(obj, 167, LV_SIZE_CONTENT);
+                    lv_obj_set_pos(obj, 0, 63);
+                    lv_obj_set_size(obj, 240, LV_SIZE_CONTENT);
                     lv_obj_set_style_text_font(obj, &lv_font_montserrat_40, LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_text_color(obj, lv_color_hex(0xffffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_label_set_text(obj, "50%");
+                }
+                {
+                    // arc_value
+                    lv_obj_t *obj = lv_bar_create(parent_obj);
+                    objects.arc_value = obj;
+                    lv_obj_set_pos(obj, 28, 122);
+                    lv_obj_set_size(obj, 190, 23);
+                    lv_bar_set_value(obj, 50, LV_ANIM_OFF);
                 }
             }
         }
@@ -494,11 +498,24 @@ void create_screen_stock() {
 void tick_screen_stock() {
 }
 
+void create_screen_u() {
+    lv_obj_t *obj = lv_obj_create(0);
+    objects.u = obj;
+    lv_obj_set_pos(obj, 0, 0);
+    lv_obj_set_size(obj, 240, 240);
+    
+    tick_screen_u();
+}
+
+void tick_screen_u() {
+}
+
 typedef void (*tick_screen_func_t)();
 tick_screen_func_t tick_screen_funcs[] = {
     tick_screen_main,
     tick_screen_menu,
     tick_screen_stock,
+    tick_screen_u,
 };
 void tick_screen(int screen_index) {
     tick_screen_funcs[screen_index]();
@@ -599,4 +616,5 @@ void create_screens() {
     create_screen_main();
     create_screen_menu();
     create_screen_stock();
+    create_screen_u();
 }
