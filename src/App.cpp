@@ -26,6 +26,7 @@ static int selectedOtaIndex = -1;
 
 static bool pendingImageLoad = false;
 static uint32_t lastScrollTime = 0;
+static bool forceStockUpdate = false; // Cờ báo hiệu cho luồng chạy nền
 
 static FsFile openSDFallback(const char* path) {
     pinMode(SCR_CS_PIN, OUTPUT);
@@ -35,6 +36,7 @@ static FsFile openSDFallback(const char* path) {
 }
 
 void stockUpdateTask(void *pvParameters) {
+    uint32_t lastFetch = 0;
     while (1) {
         if (appState.currentMenu == MENU_STOCK) {
             if (!webServer.runWiFiSetup()) {
@@ -43,16 +45,23 @@ void stockUpdateTask(void *pvParameters) {
             }
             char ticker[15];
             stock.getTickerName(appState.stockIndex, ticker); 
+            
+            // Chỉ kéo dữ liệu nếu ticker hợp lệ (không phải dòng "--GAS--")
             if (ticker[0] != '-') {
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                    stock.fetchAndUpdateUI(appState.stockIndex); 
-                    xSemaphoreGive(xGuiSemaphore);
+                int delayInterval = strstr(ticker, "USDT") ? 3000 : 15000;
+                
+                // Kéo dữ liệu khi có lệnh ép (từ con lăn) HOẶC đã hết thời gian chờ
+                if (forceStockUpdate || millis() - lastFetch > delayInterval || lastFetch == 0) {
+                    forceStockUpdate = false;
+                    
+                    if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+                        stock.fetchAndUpdateUI(appState.stockIndex); 
+                        xSemaphoreGive(xGuiSemaphore);
+                    }
+                    lastFetch = millis();
                 }
-                int delayTime = strstr(ticker, "USDT") ? 1000 : 15000;
-                vTaskDelay(pdMS_TO_TICKS(delayTime));
-            } else {
-                vTaskDelay(pdMS_TO_TICKS(500)); 
             }
+            vTaskDelay(pdMS_TO_TICKS(100)); // Quét trạng thái cực nhanh
         } else {
             stockTaskHandle = NULL;
             vTaskDelete(NULL); 
@@ -110,6 +119,8 @@ void otaUpdateTask(void *pvParameters) {
 
 void AppLogic::begin() {
     Serial.println("[APP] begin() called");
+    if (appState.sleepTimeout > 300) appState.sleepTimeout = 60; // Gác cổng thêm lần nữa cho chắc
+    
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
         display.loadBackgroundFromSD(); 
         encoder.setBoundaries(0, 100, false);
@@ -189,7 +200,9 @@ void AppLogic::handleEvents() {
             }
             else {
                 appState.menuIndex = encoder.getEncoderValue(); 
-                if (appState.currentMenu == MENU_STOCK) appState.stockIndex = appState.menuIndex;
+                if (appState.currentMenu == MENU_STOCK) {
+                    appState.stockIndex = appState.menuIndex;
+                }
 
                 if (isViewingImage && appState.currentMenu == MENU_SELECT_BG) {
                     if (appState.menuIndex == storage.bgFileCount) {
@@ -345,7 +358,9 @@ void AppLogic::enterMenu(int level) {
     
     if (level == MENU_STOCK || level == MENU_OTA || level == MENU_WEB_SERVER) {
         originalSleepTimeout = appState.sleepTimeout;
+        if (originalSleepTimeout > 300) originalSleepTimeout = 60; // Gác cổng
         appState.sleepTimeout = 999999; 
+        
         if (level == MENU_STOCK) {
             encoder.setBoundaries(0, 19, true); 
             if (!stockTaskHandle) xTaskCreatePinnedToCore(stockUpdateTask, "StockTask", STACK_NETWORK, NULL, PRIO_NETWORK, &stockTaskHandle, 1);
@@ -418,11 +433,9 @@ void AppLogic::exitMenu() {
     storage.saveConfig(appState); 
 }
 
+// Hàm Callback tách rời hoàn toàn: Khi xoay con lăn chỉ cần phất cờ
 extern "C" void action_on_stock_changed_cb(lv_event_t * e) {
     lv_obj_t * roller = lv_event_get_target(e);
     appState.stockIndex = lv_roller_get_selected(roller);
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
-        stock.fetchAndUpdateUI(appState.stockIndex);
-        xSemaphoreGive(xGuiSemaphore);
-    }
+    forceStockUpdate = true; // Phát tín hiệu để task ngầm tự kéo mạng
 }

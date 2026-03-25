@@ -92,7 +92,7 @@ char* StorageLogic::readFileToPSRAM(const char* filename) {
     char* buffer = (char*)heap_caps_malloc(fileSize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (buffer) {
         size_t totalRead = 0;
-        char temp_buf[1024]; // Trạm trung chuyển chống lỗi DMA PSRAM
+        char temp_buf[1024]; 
         while (totalRead < fileSize) {
             size_t toRead = (fileSize - totalRead > 1024) ? 1024 : (fileSize - totalRead);
             int r = file.read(temp_buf, toRead);
@@ -117,7 +117,8 @@ void StorageLogic::saveConfig(RemoteState &state) {
     FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
         StaticJsonDocument<512> doc;
-        doc["sleepTimeout"] = state.sleepTimeout;
+        // BỘ LỌC CHỐNG NGÁO: Nếu sleepTimeout lớn hơn 300 thì ép về 60
+        doc["sleepTimeout"] = (state.sleepTimeout > 300) ? 60 : state.sleepTimeout;
         doc["oledBrightness"] = state.oledBrightness;
         doc["brightness"] = state.brightness;
         doc["temperature"] = state.temperature;
@@ -137,6 +138,9 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         DeserializationError error = deserializeJson(doc, file);
         if (!error) {
             state.sleepTimeout = doc["sleepTimeout"] | 60;
+            // BỘ LỌC CHỐNG NGÁO LÚC ĐỌC FILE LÊN
+            if (state.sleepTimeout > 300) state.sleepTimeout = 60;
+            
             state.oledBrightness = doc["oledBrightness"] | 50;
             state.brightness = doc["brightness"] | 50;
             state.temperature = doc["temperature"] | 50;
