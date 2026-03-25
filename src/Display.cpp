@@ -25,12 +25,10 @@ static lv_obj_t* g_menuBtns[30];
 
 #define BACKLIGHT_CHANNEL 0 
 
-// ĐÃ CẬP NHẬT CẤU TRÚC TEXT MENU MỚI
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. Stock Monitor", "4. OTA Update", "5. Web Server", "6. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
 
-// KHAI BÁO EVENT CHỨNG KHOÁN TỪ APP.CPP
 extern "C" void action_on_stock_changed_cb(lv_event_t * e);
 
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -79,10 +77,8 @@ void DisplayLogic::begin() {
     indev_drv.read_cb = my_indev_read;
     lv_indev_drv_register(&indev_drv);
 
-    // CÚ CHỐT: HÀM KHỞI TẠO CỦA EEZ STUDIO
     create_screens(); 
     
-    // Gắn sự kiện cuộn cho Roller Chứng khoán
     if (objects.stock_roller != NULL) {
         lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     }
@@ -193,19 +189,29 @@ void DisplayLogic::updateUI(RemoteState &state) {
         if (state.currentMenu == MENU_SET_SLEEP) {
             val = (state.sleepTimeout - 30) * 100 / (300 - 30);
             lv_label_set_text_fmt(objects.value, "%ds", state.sleepTimeout);
-            title = "SLEEP TIMER"; arc_color = lv_palette_main(LV_PALETTE_CYAN);
+            title = "SLEEP TIMER"; 
+            arc_color = lv_palette_main(LV_PALETTE_CYAN);
         } else if (state.currentMenu == MENU_SET_BACKLIGHT) {
             val = state.oledBrightness;
             lv_label_set_text_fmt(objects.value, "%d%%", val);
-            title = "BACKLIGHT"; arc_color = lv_palette_main(LV_PALETTE_PURPLE);
+            title = "BACKLIGHT"; 
+            arc_color = lv_palette_main(LV_PALETTE_PURPLE);
         } else {
             val = state.isTempMode ? state.temperature : state.brightness;
-            lv_label_set_text_fmt(objects.value, "%d%%", val);
+            
+            // CÚ CHỐT: Xử lý hiển thị Kelvin cho Color Temp
+            if (state.isTempMode) {
+                // Quy đổi 0-100 sang dải 2700K - 6500K (bạn có thể tự thay đổi dải K này nếu đèn của bạn khác)
+                int kelvin = map(val, 0, 100, 2700, 6500); 
+                lv_label_set_text_fmt(objects.value, "%dK", kelvin);
+            } else {
+                lv_label_set_text_fmt(objects.value, "%d%%", val);
+            }
+            
             title = state.isTempMode ? "COLOR TEMP" : "BRIGHTNESS";
             arc_color = state.isTempMode ? lv_palette_main(LV_PALETTE_ORANGE) : lv_color_hex(0xffff7200);
         }
 
-        // CÚ CHỐT: CHUYỂN SANG DÙNG lv_bar
         lv_bar_set_value(objects.arc_value, val, LV_ANIM_ON);
         lv_label_set_text(objects.label_value, title);
         lv_obj_set_style_bg_color(objects.arc_value, arc_color, LV_PART_INDICATOR);
