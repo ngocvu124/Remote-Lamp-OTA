@@ -30,6 +30,9 @@ const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. Stock Monito
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
 
+// KHAI BÁO EVENT CHỨNG KHOÁN TỪ APP.CPP
+extern "C" void action_on_stock_changed_cb(lv_event_t * e);
+
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
@@ -76,7 +79,13 @@ void DisplayLogic::begin() {
     indev_drv.read_cb = my_indev_read;
     lv_indev_drv_register(&indev_drv);
 
-    ui_init(); 
+    // CÚ CHỐT: HÀM KHỞI TẠO CỦA EEZ STUDIO
+    create_screens(); 
+    
+    // Gắn sự kiện cuộn cho Roller Chứng khoán
+    if (objects.stock_roller != NULL) {
+        lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    }
     
     scr_image_preview = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
@@ -196,9 +205,10 @@ void DisplayLogic::updateUI(RemoteState &state) {
             arc_color = state.isTempMode ? lv_palette_main(LV_PALETTE_ORANGE) : lv_color_hex(0xffff7200);
         }
 
-        lv_arc_set_value(objects.arc_value, val);
+        // CÚ CHỐT: CHUYỂN SANG DÙNG lv_bar
+        lv_bar_set_value(objects.arc_value, val, LV_ANIM_ON);
         lv_label_set_text(objects.label_value, title);
-        lv_obj_set_style_arc_color(objects.arc_value, arc_color, LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(objects.arc_value, arc_color, LV_PART_INDICATOR);
     } 
     else {
         if (lv_scr_act() != objects.menu) lv_scr_load(objects.menu);
