@@ -40,10 +40,10 @@ void guiTask(void *pvParameters) {
         lastTick = currentTick;
 
         uint32_t delay_ms = 5;
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(20))) {
+        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(20))) {
             lv_tick_inc(diff); 
             delay_ms = display.loop(); // lần đầu gọi này sẽ render UI đè lên boot log
-            xSemaphoreGive(xGuiSemaphore);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
         }
         
         if (delay_ms == 0 || delay_ms == 0xFFFFFFFF) delay_ms = 5;
@@ -66,7 +66,7 @@ void appTask(void *pvParameters) {
     while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
     vTaskDelay(pdMS_TO_TICKS(100)); 
 
-    if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
 
         // ── Boot log phase 3: SD Card ──────────────────────────
         display.bootPrint("SD", "Mounting SD card");
@@ -89,7 +89,7 @@ void appTask(void *pvParameters) {
         // ── Boot log phase 5: Dòng cuối ───────────────────────
         display.bootPrint("APP", "All systems ready!");
 
-        xSemaphoreGive(xGuiSemaphore);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
     }
 
     webServer.begin(); 
@@ -177,7 +177,7 @@ void setup() {
     pinMode(SCR_CS_PIN, OUTPUT);
     digitalWrite(SCR_CS_PIN, HIGH);
 
-    xGuiSemaphore = xSemaphoreCreateMutex();
+    xGuiSemaphore = xSemaphoreCreateRecursiveMutex();
     xEncoderQueue = xQueueCreate(10, sizeof(EncoderEvent));
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 
 

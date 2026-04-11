@@ -22,15 +22,15 @@ void StorageLogic::begin() {
     // Lấy semaphore để tránh đụng độ với TFT nếu GUI task đã chạy
     bool hasLock = false;
     if (xGuiSemaphore != NULL) {
-        hasLock = (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
+        hasLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
     }
 
-    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)))) {
+    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI))) {
         // Kiểm tra an toàn xem card() có NULL hay không trước khi gọi errorCode()
         uint8_t errCode = sd_bg.card() ? sd_bg.card()->errorCode() : 0xFF;
         Serial.printf("[STORAGE] SD Mount Failed! Error code: 0x%X\n", errCode);
         isReady = false;
-        if (hasLock) xSemaphoreGive(xGuiSemaphore);
+        if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
         return;
     }
     
@@ -39,7 +39,7 @@ void StorageLogic::begin() {
         sd_bg.mkdir("/background");
     }
 
-    if (hasLock) xSemaphoreGive(xGuiSemaphore);
+    if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
     loadBgFiles(); 
 }
 
@@ -50,12 +50,13 @@ void StorageLogic::loadBgFiles() {
     
     bool hasLock = false;
     if (xGuiSemaphore != NULL) {
-        hasLock = (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
+        hasLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
     }
+    if (!hasLock && xGuiSemaphore != NULL) return; // FIX: Bắt buộc dừng lại nếu không lấy được khóa SPI
 
     FsFile dir = sd_bg.open("/background", O_READ); 
     if (!dir) {
-        if (hasLock) xSemaphoreGive(xGuiSemaphore);
+        if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
         return;
     }
     dir.rewindDirectory();
@@ -70,7 +71,7 @@ void StorageLogic::loadBgFiles() {
         file.close();
     }
     dir.close();
-    if (hasLock) xSemaphoreGive(xGuiSemaphore);
+    if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
     Serial.printf("[STORAGE] Loaded %d files in /background\n", bgFileCount);
 }
 
@@ -79,7 +80,7 @@ void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;
     
     // Phải khóa Bus SPI (thông qua GuiSemaphore) trước khi cho SD Card ghi để tránh đụng độ TFT
-    if (xGuiSemaphore != NULL && xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+    if (xGuiSemaphore != NULL && xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
         FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
         if (file) {
             StaticJsonDocument<512> doc;
@@ -94,7 +95,7 @@ void StorageLogic::saveConfig(RemoteState &state) {
             file.print(jsonStr);
             file.close();
         }
-        xSemaphoreGive(xGuiSemaphore);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
     }
 }
 
@@ -103,8 +104,9 @@ bool StorageLogic::loadConfig(RemoteState &state) {
 
     bool hasLock = false;
     if (xGuiSemaphore != NULL) {
-        hasLock = (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
+        hasLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
     }
+    if (!hasLock && xGuiSemaphore != NULL) return false; // FIX: Không đọc file nếu đang bận vẽ màn hình
 
     FsFile file = sd_bg.open("/config.json", O_READ);
     if (file) {
@@ -128,10 +130,10 @@ bool StorageLogic::loadConfig(RemoteState &state) {
             }
         }
         file.close();
-        if (hasLock) xSemaphoreGive(xGuiSemaphore);
+        if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
         return true;
     }
-    if (hasLock) xSemaphoreGive(xGuiSemaphore);
+    if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
     
     strcpy(state.bgFilePath, "/bg.bin");
     return false;
