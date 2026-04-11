@@ -88,11 +88,11 @@ void DisplayLogic::begin() {
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, 255);      
 
-    tft.begin(); 
-    tft.setRotation(0); 
-    tft.invertDisplay(true);
+    tft.begin();
+    tft.setSwapBytes(true); 
+    tft.setRotation(2); 
+    tft.invertDisplay(false);
     tft.fillScreen(TFT_BLACK);
-
     // Vẽ header boot screen
     bootY = 8;
     tft.setTextSize(1);
