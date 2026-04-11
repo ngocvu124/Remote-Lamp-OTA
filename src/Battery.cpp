@@ -12,10 +12,9 @@ void BatteryLogic::begin() {
 
 float BatteryLogic::readRawVoltage() {
     uint32_t mvSum = 0;
-    // Sử dụng BAT_SAMPLES đã định nghĩa trong Config.h
     for(int i = 0; i < BAT_SAMPLES; i++) {
         mvSum += analogReadMilliVolts(PIN_BATTERY);
-        delay(1);
+        vTaskDelay(pdMS_TO_TICKS(1)); // ← Nhường CPU cho FreeRTOS scheduler
     }
     return (mvSum / (float)BAT_SAMPLES * VOLTAGE_DIVIDER_RATIO * BAT_CALIBRATION_FACTOR) / 1000.0;
 }
