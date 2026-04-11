@@ -236,6 +236,11 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
 void DisplayLogic::forceRebuild() { lastMenuType = (MenuLevel)-1; }
 
 void DisplayLogic::updateUI(RemoteState &state) {
+    // Bỏ qua việc ghi đè màn hình nếu đang ở chế độ xem trước ảnh (preview)
+    if (scr_image_preview != NULL && lv_scr_act() == scr_image_preview) {
+        return;
+    }
+
     if (state.currentMenu == MENU_STOCK) {
         if (lv_scr_act() != objects.stock) { lv_scr_load(objects.stock); lastMenuType = (MenuLevel)-1; }
         if (objects.stock_roller != NULL) lv_roller_set_selected(objects.stock_roller, state.stockIndex, LV_ANIM_ON);
