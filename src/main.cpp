@@ -124,6 +124,13 @@ void setup() {
     sys.begin(); 
     Serial.begin(115200);
 
+    // [QUAN TRỌNG] Ép chân CS của SD Card và màn hình lên HIGH ngay lập tức.
+    // Đảm bảo thẻ nhớ bị "khóa" và không đọc nhầm rác từ bus SPI lúc màn hình khởi tạo.
+    pinMode(SD_CS_PIN, OUTPUT);
+    digitalWrite(SD_CS_PIN, HIGH);
+    pinMode(SCR_CS_PIN, OUTPUT);
+    digitalWrite(SCR_CS_PIN, HIGH);
+
     xGuiSemaphore = xSemaphoreCreateMutex();
     xEncoderQueue = xQueueCreate(10, sizeof(EncoderEvent));
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 

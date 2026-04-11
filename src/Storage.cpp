@@ -10,18 +10,15 @@ void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
     pinMode(SCR_CS_PIN, OUTPUT);
     digitalWrite(SCR_CS_PIN, HIGH);
+    
+    // Củng cố lại chân SD_CS và cho bus SPI xả nhiễu trước khi nói chuyện với thẻ nhớ
+    pinMode(SD_CS_PIN, OUTPUT);
+    digitalWrite(SD_CS_PIN, HIGH);
+    vTaskDelay(pdMS_TO_TICKS(20));
+
     sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
     
     if (sd_bg.card()->errorCode()) {
-        isReady = false;
-        Serial.println("[STORAGE] SD Mount FAILED!");
-        return;
-    }
-    
-    isReady = true;
-    Serial.println("[STORAGE] SD Mount OK (4MHz Rock-Solid)!");
-
-    if (!sd_bg.exists("/background")) {
         sd_bg.mkdir("/background");
     }
     
