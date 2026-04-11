@@ -91,7 +91,7 @@ void DisplayLogic::begin() {
     tft.begin();
     tft.setSwapBytes(true); 
     tft.setRotation(2); 
-    tft.invertDisplay(false);
+    tft.invertDisplay(true);
     tft.fillScreen(TFT_BLACK);
     // Vẽ header boot screen
     bootY = 8;
@@ -454,6 +454,8 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         if (!preview_img_obj) {
             preview_img_obj = lv_img_create(scr_image_preview);
             lv_obj_center(preview_img_obj);
+        } else {
+            lv_img_set_src(preview_img_obj, ""); // Clear src cũ để ép LVGL nạp lại ảnh mới
         }
         lv_img_set_src(preview_img_obj, &preview_img_dsc);
         lv_scr_load(scr_image_preview);
