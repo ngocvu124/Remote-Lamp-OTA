@@ -166,7 +166,10 @@ void DisplayLogic::loadBackgroundFromSD() {
     }
 
     size_t allocSize = (fileSize > 115200) ? 115200 : fileSize;
+
+    Serial.printf("[DISPLAY] BG Alloc: %d bytes. Free PSRAM: %d\n", allocSize, ESP.getFreePsram());
     bg_data_buffer = (uint8_t*)heap_caps_malloc(allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!bg_data_buffer) Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
     
     if (bg_data_buffer) {
         size_t totalRead = 0;
@@ -444,8 +447,13 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     if (preview_data_buffer != NULL) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
     
     size_t allocSize = (fileSize > 115200) ? 115200 : fileSize;
+
+    Serial.printf("[DISPLAY] Preview Alloc: %d bytes. Free PSRAM: %d\n", allocSize, ESP.getFreePsram());
     preview_data_buffer = (uint8_t*)heap_caps_malloc(allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!preview_data_buffer) return false;
+    if (!preview_data_buffer) {
+        Serial.println("[DISPLAY] Preview Alloc FAIL: PSRAM not available or full!");
+        return false;
+    }
 
     size_t totalRead = 0;
     uint8_t temp_buf[2048]; 
