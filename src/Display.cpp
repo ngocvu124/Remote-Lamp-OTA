@@ -23,7 +23,45 @@ static lv_obj_t* preview_img_obj = NULL;
 
 static lv_obj_t* g_menuBtns[30]; 
 
-#define BACKLIGHT_CHANNEL 0 
+#define BACKLIGHT_CHANNEL 0
+
+// =============================================
+// BOOT LOG — dùng tft trực tiếp, không qua LVGL
+// =============================================
+static int bootY = 0;
+static const int BOOT_LINE_H = 14;
+
+void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
+    if (bootY > 220) return; // tràn màn hình thì thôi
+
+    tft.setTextSize(1);
+    tft.setTextWrap(false);
+
+    // [TAG] màu cyan
+    tft.setTextColor(ST77XX_CYAN);
+    tft.setCursor(5, bootY);
+    tft.print("[");
+    tft.print(tag);
+    tft.print("] ");
+
+    // Nội dung màu trắng
+    tft.setTextColor(ST77XX_WHITE);
+    tft.print(msg);
+    tft.print("... ");
+
+    // OK/FAIL
+    if (ok) {
+        tft.setTextColor(ST77XX_GREEN);
+        tft.print("OK");
+    } else {
+        tft.setTextColor(ST77XX_RED);
+        tft.print("FAIL");
+    }
+
+    bootY += BOOT_LINE_H;
+}
+
+// =============================================
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. Stock Monitor", "4. OTA Update", "5. Web Server", "6. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. Back"}; 
@@ -47,7 +85,7 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 }
 
 void DisplayLogic::begin() {
-    Serial.println("[DISPLAY] Initializing ST7789...");
+    // ── Phase 1: Khởi tạo phần cứng màn hình ──────────────────
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
@@ -56,6 +94,29 @@ void DisplayLogic::begin() {
     tft.init(240, 240); 
     tft.setRotation(0); 
     tft.invertDisplay(true);
+    tft.fillScreen(ST77XX_BLACK);
+
+    // Vẽ header boot screen
+    bootY = 8;
+    tft.setTextSize(1);
+    tft.setTextColor(ST77XX_ORANGE);
+    tft.setCursor(5, bootY);
+    tft.print("Remote Lamp ");
+    tft.print(FIRMWARE_VERSION);
+    bootY += BOOT_LINE_H;
+
+    tft.setTextColor(0x4208); // xám tối — đường kẻ phân cách
+    tft.setCursor(5, bootY);
+    tft.print("--------------------------------");
+    bootY += BOOT_LINE_H + 2;
+
+    // Log các bước khởi tạo phần cứng
+    bootPrint("SYS",  "Booting system");
+    bootPrint("GPIO", "Initializing pins");
+    bootPrint("SPI",  "Display driver loaded");
+
+    // ── Phase 2: Khởi tạo LVGL ────────────────────────────────
+    bootPrint("LVGL", "Init graphics engine");
 
     lv_init();
 
@@ -77,6 +138,8 @@ void DisplayLogic::begin() {
     indev_drv.read_cb = my_indev_read;
     lv_indev_drv_register(&indev_drv);
 
+    // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
+    bootPrint("UI", "Building screens");
     create_screens(); 
     
     if (objects.stock_roller != NULL) {
@@ -86,7 +149,10 @@ void DisplayLogic::begin() {
     scr_image_preview = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
 
+    bootPrint("UI", "Screens ready");
+
     Serial.println("[DISPLAY] LVGL UI Initialized.");
+    // Phần còn lại (SD, CFG, APP) sẽ do appTask gọi bootPrint() tiếp
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
@@ -199,9 +265,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
         } else {
             val = state.isTempMode ? state.temperature : state.brightness;
             
-            // CÚ CHỐT: Xử lý hiển thị Kelvin cho Color Temp
             if (state.isTempMode) {
-                // Quy đổi 0-100 sang dải 2700K - 6500K (bạn có thể tự thay đổi dải K này nếu đèn của bạn khác)
                 int kelvin = map(val, 0, 100, 2700, 6500); 
                 lv_label_set_text_fmt(objects.value, "%dK", kelvin);
             } else {

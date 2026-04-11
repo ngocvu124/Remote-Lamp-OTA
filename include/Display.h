@@ -22,6 +22,9 @@ public:
     void forceRebuild(); 
     void loadBackgroundFromSD(); 
 
+    // BOOT LOG: gọi trước khi LVGL sẵn sàng, dùng tft trực tiếp
+    void bootPrint(const char* tag, const char* msg, bool ok = true);
+
     // CÁC HÀM XỬ LÝ PREVIEW ẢNH
     bool showImagePreview(FsFile& file);
     void closeImagePreview();
@@ -34,7 +37,6 @@ private:
     int currentMenuCount = 0;
     MenuLevel lastMenuType = MENU_NONE;
     
-    // CÚ CHỐT: Tăng mảng chứa nút bấm lên 25 để chứa thoải mái danh sách file thẻ nhớ
     lv_obj_t* menuButtons[25]; 
 };
 
