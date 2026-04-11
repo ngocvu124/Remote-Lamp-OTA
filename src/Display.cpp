@@ -76,6 +76,14 @@ void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_
     lv_disp_flush_ready(disp);
 }
 
+void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
+    // Dummy read: Luôn trả về trạng thái nhả nút và không xoay.
+    // Việc này giúp thỏa mãn code sinh tự động của UI Builder (tránh crash),
+    // đồng thời không gây xung đột sự kiện với luồng xử lý riêng của AppTask.
+    data->state = LV_INDEV_STATE_RELEASED;
+    data->enc_diff = 0; 
+}
+
 void DisplayLogic::begin() {
     // ── Phase 1: Khởi tạo phần cứng màn hình ──────────────────
     pinMode(SCR_BLK_PIN, OUTPUT);
@@ -123,6 +131,12 @@ void DisplayLogic::begin() {
     disp_drv.flush_cb = my_disp_flush;
     disp_drv.draw_buf = &draw_buf;
     lv_disp_drv_register(&disp_drv);
+
+    static lv_indev_drv_t indev_drv;
+    lv_indev_drv_init(&indev_drv);
+    indev_drv.type = LV_INDEV_TYPE_ENCODER;
+    indev_drv.read_cb = my_indev_read;
+    lv_indev_drv_register(&indev_drv);
 
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
     bootPrint("UI", "Building screens");
