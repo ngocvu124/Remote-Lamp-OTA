@@ -16,12 +16,18 @@ void StorageLogic::begin() {
     digitalWrite(SD_CS_PIN, HIGH);
     vTaskDelay(pdMS_TO_TICKS(20));
 
-    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
-    
-    if (sd_bg.card()->errorCode()) {
-        sd_bg.mkdir("/background");
+    // Phải kiểm tra kết quả trả về và bật cờ isReady
+    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)))) {
+        Serial.printf("[STORAGE] SD Mount Failed! Error code: 0x%X\n", sd_bg.card()->errorCode());
+        isReady = false;
+        return;
     }
     
+    isReady = true;
+    if (!sd_bg.exists("/background")) {
+        sd_bg.mkdir("/background");
+    }
+
     loadBgFiles(); 
 }
 
