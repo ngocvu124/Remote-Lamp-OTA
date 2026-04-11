@@ -34,9 +34,6 @@ void BatteryLogic::update(RemoteState &state) {
     float currentVolts = readRawVoltage();
     int newBat = getPercentage();
 
-    // Hiện log để bác soi Volt
-    Serial.printf("[BATTERY] Real-time: %.2fV | Capacity: %d%%\n", currentVolts, newBat);
-
     if (newBat != state.batteryLevel) {
         state.batteryLevel = newBat;
     }

@@ -28,13 +28,6 @@ static bool pendingImageLoad = false; // Cờ báo hiệu load ảnh preview khi
 static uint32_t lastScrollTime = 0;   // Mốc thời gian để debounce việc cuộn
 static volatile bool forceStockUpdate = false; // Cờ báo hiệu cho luồng stock (cần volatile vì dùng xuyên Task)
 
-static FsFile openSDFallback(const char* path) {
-    // Ép màn hình nhả bus SPI trước khi nói chuyện với thẻ nhớ
-    pinMode(SCR_CS_PIN, OUTPUT);
-    digitalWrite(SCR_CS_PIN, HIGH);
-    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
-    return sd_bg.open(path, O_READ);
-}
 
 void stockUpdateTask(void *pvParameters) {
     uint32_t lastFetch = 0;
@@ -221,7 +214,6 @@ void AppLogic::handleEvents() {
         }
 
         if (event == ENC_CLICK) {
-            Serial.printf("[APP] Event: ENC_CLICK. menuIndex: %d\n", appState.menuIndex);
             if ((isViewingFile || isViewingImage) && appState.currentMenu != MENU_SELECT_BG) {
                 isViewingFile = false;
                 isViewingImage = false;
@@ -293,7 +285,7 @@ void AppLogic::handleEvents() {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    FsFile file = openSDFallback(fullPath); 
+                                    FsFile file = sd_bg.open(fullPath, O_READ); 
                                     if (file) {
                                         if (display.showImagePreview(file)) {
                                             isViewingImage = true;
@@ -336,7 +328,7 @@ void AppLogic::handleEvents() {
         Serial.printf("[APP] Previewing image on scroll: %s\n", fullPath);
         
         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-            FsFile file = openSDFallback(fullPath); 
+            FsFile file = sd_bg.open(fullPath, O_READ); 
             if (file) {
                 display.showImagePreview(file);
                 file.close();

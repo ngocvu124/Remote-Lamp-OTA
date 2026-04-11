@@ -1,20 +1,15 @@
 #include "Storage.h"
-#include <TFT_eSPI.h>
 #include <esp_heap_caps.h>
 #include <ArduinoJson.h>
 
 StorageLogic storage;
 extern SdFs sd_bg; 
 
-static void wakeupSD() {
-    pinMode(SCR_CS_PIN, OUTPUT);
-    digitalWrite(SCR_CS_PIN, HIGH);
-    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16), &TFT_eSPI::getSPIinstance()));
-}
-
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
-    wakeupSD();
+    pinMode(SCR_CS_PIN, OUTPUT);
+    digitalWrite(SCR_CS_PIN, HIGH);
+    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
     
     if (sd_bg.card()->errorCode()) {
         isReady = false;
@@ -35,8 +30,6 @@ void StorageLogic::begin() {
 
 void StorageLogic::loadFiles() {
     if (!isReady) return;
-    wakeupSD(); 
-    
     fileCount = 0;
     FsFile dir = sd_bg.open("/", O_READ); 
     if (!dir) return;
@@ -57,8 +50,6 @@ void StorageLogic::loadFiles() {
 
 void StorageLogic::loadBgFiles() {
     if (!isReady) return;
-    wakeupSD(); 
-    
     bgFileCount = 0;
     FsFile dir = sd_bg.open("/background", O_READ); 
     if (!dir) return;
@@ -79,8 +70,6 @@ void StorageLogic::loadBgFiles() {
 
 char* StorageLogic::readFileToPSRAM(const char* filename) {
     if (!isReady) return NULL;
-    wakeupSD(); 
-    
     FsFile file = sd_bg.open(filename, O_READ);
     if (!file) return NULL;
 
@@ -113,8 +102,6 @@ void StorageLogic::freePSRAMBuffer(char* buffer) {
 
 void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;
-    wakeupSD(); 
-    
     FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
         StaticJsonDocument<512> doc;
@@ -131,8 +118,6 @@ void StorageLogic::saveConfig(RemoteState &state) {
 
 bool StorageLogic::loadConfig(RemoteState &state) {
     if (!isReady) return false;
-    wakeupSD();
-    
     FsFile file = sd_bg.open("/config.json", O_READ);
     if (file) {
         StaticJsonDocument<512> doc;
