@@ -27,7 +27,7 @@ void guiTask(void *pvParameters) {
     }
 
     // Delay nhỏ để người dùng kịp đọc dòng cuối boot log
-    vTaskDelay(pdMS_TO_TICKS(400));
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
     uint32_t lastTick = millis();
     while (1) {
