@@ -162,6 +162,8 @@ void DisplayLogic::begin() {
 }
 
 void DisplayLogic::loadBackgroundFromSD() {
+    if (!storage.isReady) return; // Thêm dòng này để chống crash nếu thẻ nhớ chưa mount hoặc bị lỏng
+
     FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
     if (!file) file = sd_bg.open("/bg.bin", O_READ);
     if (!file) return;

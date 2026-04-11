@@ -2,10 +2,12 @@
 #include <esp_heap_caps.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
+#include <TFT_eSPI.h>
 
 StorageLogic storage;
 extern SdFs sd_bg; 
 extern SemaphoreHandle_t xGuiSemaphore;
+extern TFT_eSPI tft;
 
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
@@ -17,8 +19,9 @@ void StorageLogic::begin() {
     digitalWrite(SD_CS_PIN, HIGH);
     vTaskDelay(pdMS_TO_TICKS(20));
 
-    // Phải kiểm tra kết quả trả về và bật cờ isReady
-    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)))) {
+    // CÚ CHỐT: Ép SdFat dùng chung đúng đối tượng SPI của màn hình (TFT)
+    // Việc này ngăn SdFat tạo ra một luồng SPI thứ 2 gây đụng độ phần cứng dẫn tới crash StoreProhibited!
+    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &tft.getSPIinstance()))) {
         Serial.printf("[STORAGE] SD Mount Failed! Error code: 0x%X\n", sd_bg.card()->errorCode());
         isReady = false;
         return;

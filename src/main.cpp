@@ -15,8 +15,8 @@ SemaphoreHandle_t xGuiSemaphore = NULL;
 QueueHandle_t xEncoderQueue = NULL;
 QueueHandle_t xEspNowQueue = NULL;
 
-// Biến đếm số lần Crash liên tiếp, lưu trong RAM RTC (không bị xóa khi crash/reset)
-RTC_DATA_ATTR int crashCount = 0;
+// Biến đếm số lần Crash liên tiếp, DÙNG RTC_NOINIT_ATTR để chống bị reset về 0
+RTC_NOINIT_ATTR int crashCount;
 
 volatile bool isGuiReady = false; 
 volatile bool isStorageReady = false;
@@ -132,6 +132,10 @@ void setup() {
     // CƠ CHẾ CHỐNG BRICK TỰ ĐỘNG (AUTO ROLLBACK)
     // =========================================================================
     esp_reset_reason_t reason = esp_reset_reason();
+    if (reason == ESP_RST_POWERON || reason == ESP_RST_BROWNOUT) {
+        crashCount = 0; // Chỉ reset biến khi cấp nguồn mới
+    }
+
     // Nếu reset do Crash (PANIC) hoặc bị Treo (Watchdog Timeout)
     if (reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT || reason == ESP_RST_TASK_WDT) {
         crashCount++;
@@ -164,8 +168,6 @@ void setup() {
                 Serial.println("[SAFE BOOT] Cannot rollback! No alternative firmware found.");
             }
         }
-    } else if (reason == ESP_RST_POWERON || reason == ESP_RST_SW || reason == ESP_RST_DEEPSLEEP) {
-        crashCount = 0; // Xóa bộ đếm nếu khởi động bình thường hoặc chủ động reset
     }
 
     // [QUAN TRỌNG] Ép chân CS của SD Card và màn hình lên HIGH ngay lập tức.
