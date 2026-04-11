@@ -19,9 +19,18 @@ void StorageLogic::begin() {
     digitalWrite(SD_CS_PIN, HIGH);
     vTaskDelay(pdMS_TO_TICKS(20));
 
+    // Lấy semaphore để tránh đụng độ với TFT nếu GUI task đã chạy
+    bool hasLock = false;
+    if (xGuiSemaphore != NULL) {
+        hasLock = (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
+    }
+
     if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)))) {
-        Serial.printf("[STORAGE] SD Mount Failed! Error code: 0x%X\n", sd_bg.card()->errorCode());
+        // Kiểm tra an toàn xem card() có NULL hay không trước khi gọi errorCode()
+        uint8_t errCode = sd_bg.card() ? sd_bg.card()->errorCode() : 0xFF;
+        Serial.printf("[STORAGE] SD Mount Failed! Error code: 0x%X\n", errCode);
         isReady = false;
+        if (hasLock) xSemaphoreGive(xGuiSemaphore);
         return;
     }
     
@@ -30,6 +39,7 @@ void StorageLogic::begin() {
         sd_bg.mkdir("/background");
     }
 
+    if (hasLock) xSemaphoreGive(xGuiSemaphore);
     loadBgFiles(); 
 }
 
@@ -37,8 +47,17 @@ void StorageLogic::begin() {
 void StorageLogic::loadBgFiles() {
     if (!isReady) return;
     bgFileCount = 0;
+    
+    bool hasLock = false;
+    if (xGuiSemaphore != NULL) {
+        hasLock = (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
+    }
+
     FsFile dir = sd_bg.open("/background", O_READ); 
-    if (!dir) return;
+    if (!dir) {
+        if (hasLock) xSemaphoreGive(xGuiSemaphore);
+        return;
+    }
     dir.rewindDirectory();
     
     while (bgFileCount < 15) {
@@ -51,6 +70,7 @@ void StorageLogic::loadBgFiles() {
         file.close();
     }
     dir.close();
+    if (hasLock) xSemaphoreGive(xGuiSemaphore);
     Serial.printf("[STORAGE] Loaded %d files in /background\n", bgFileCount);
 }
 
@@ -80,6 +100,12 @@ void StorageLogic::saveConfig(RemoteState &state) {
 
 bool StorageLogic::loadConfig(RemoteState &state) {
     if (!isReady) return false;
+
+    bool hasLock = false;
+    if (xGuiSemaphore != NULL) {
+        hasLock = (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
+    }
+
     FsFile file = sd_bg.open("/config.json", O_READ);
     if (file) {
         StaticJsonDocument<512> doc;
@@ -94,14 +120,19 @@ bool StorageLogic::loadConfig(RemoteState &state) {
             state.temperature = doc["temperature"] | 50;
             const char* bg = doc["bgFilePath"];
             if (bg) {
-                strncpy(state.bgFilePath, bg, sizeof(state.bgFilePath));
+                // Tránh việc chuỗi không có ký tự kết thúc (null-terminated) gây lỗi tràn
+                strncpy(state.bgFilePath, bg, sizeof(state.bgFilePath) - 1);
+                state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
             } else {
                 strcpy(state.bgFilePath, "/bg.bin");
             }
         }
         file.close();
+        if (hasLock) xSemaphoreGive(xGuiSemaphore);
         return true;
     }
+    if (hasLock) xSemaphoreGive(xGuiSemaphore);
+    
     strcpy(state.bgFilePath, "/bg.bin");
     return false;
 }
