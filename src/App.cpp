@@ -24,16 +24,9 @@ static bool isViewingFile = false;
 static bool isViewingImage = false; 
 static int selectedOtaIndex = -1; 
 
-static bool pendingImageLoad = false;
-static uint32_t lastScrollTime = 0;
-static volatile bool forceStockUpdate = false; // Cờ báo hiệu cho luồng chạy nền (cần volatile vì dùng xuyên Task)
-
-static FsFile openSDFallback(const char* path) {
-    pinMode(SCR_CS_PIN, OUTPUT);
-    digitalWrite(SCR_CS_PIN, HIGH);
-    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
-    return sd_bg.open(path, O_READ);
-}
+static bool pendingImageLoad = false; // Cờ báo hiệu load ảnh preview khi cuộn
+static uint32_t lastScrollTime = 0;   // Mốc thời gian để debounce việc cuộn
+static volatile bool forceStockUpdate = false; // Cờ báo hiệu cho luồng stock (cần volatile vì dùng xuyên Task)
 
 void stockUpdateTask(void *pvParameters) {
     uint32_t lastFetch = 0;
@@ -292,15 +285,22 @@ void AppLogic::handleEvents() {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
                                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    FsFile file = openSDFallback(fullPath); 
+                                    // KHÔNG dùng hàm fallback, gọi trực tiếp để tránh re-init SD card
+                                    FsFile file = sd_bg.open(fullPath, O_READ); 
                                     if (file) {
                                         if (display.showImagePreview(file)) {
                                             isViewingImage = true;
                                             Serial.println("[APP] Preview SUCCESS!");
+                                        } else {
+                                            Serial.println("[APP] Preview FAILED: showImagePreview returned false.");
                                         }
                                         file.close();
+                                    } else {
+                                        Serial.printf("[APP] SD Error: Could not open %s\n", fullPath);
                                     }
                                     xSemaphoreGive(xGuiSemaphore);
+                                } else {
+                                    Serial.println("[APP] Error: GuiSemaphore timeout in preview!");
                                 }
                             }
                         }
@@ -329,10 +329,13 @@ void AppLogic::handleEvents() {
         Serial.printf("[APP] Previewing image on scroll: %s\n", fullPath);
         
         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-            FsFile file = openSDFallback(fullPath); 
+            // KHÔNG dùng hàm fallback, gọi trực tiếp để tránh re-init SD card
+            FsFile file = sd_bg.open(fullPath, O_READ); 
             if (file) {
                 display.showImagePreview(file);
                 file.close();
+            } else {
+                Serial.printf("[APP] SD Error on scroll: Could not open %s\n", fullPath);
             }
             xSemaphoreGive(xGuiSemaphore);
         }
