@@ -124,8 +124,6 @@ void setup() {
     sys.begin(); 
     Serial.begin(115200);
 
-    SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
-
     xGuiSemaphore = xSemaphoreCreateMutex();
     xEncoderQueue = xQueueCreate(10, sizeof(EncoderEvent));
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 

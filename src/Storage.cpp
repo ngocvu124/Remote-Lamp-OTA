@@ -1,4 +1,5 @@
 #include "Storage.h"
+#include <TFT_eSPI.h>
 #include <esp_heap_caps.h>
 #include <ArduinoJson.h>
 
@@ -8,7 +9,7 @@ extern SdFs sd_bg;
 static void wakeupSD() {
     pinMode(SCR_CS_PIN, OUTPUT);
     digitalWrite(SCR_CS_PIN, HIGH);
-    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)));
+    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(16), &TFT_eSPI::getSPIinstance()));
 }
 
 void StorageLogic::begin() {
