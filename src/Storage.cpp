@@ -4,6 +4,7 @@
 
 StorageLogic storage;
 extern SdFs sd_bg; 
+extern SemaphoreHandle_t xGuiSemaphore;
 
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
@@ -102,17 +103,24 @@ void StorageLogic::freePSRAMBuffer(char* buffer) {
 
 void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;
-    FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
-    if (file) {
-        StaticJsonDocument<512> doc;
-        // BỘ LỌC CHỐNG NGÁO: Nếu sleepTimeout lớn hơn 300 thì ép về 60
-        doc["sleepTimeout"] = (state.sleepTimeout > 300) ? 60 : state.sleepTimeout;
-        doc["oledBrightness"] = state.oledBrightness;
-        doc["brightness"] = state.brightness;
-        doc["temperature"] = state.temperature;
-        doc["bgFilePath"] = state.bgFilePath;
-        serializeJson(doc, file);
-        file.close();
+    
+    // Phải khóa Bus SPI (thông qua GuiSemaphore) trước khi cho SD Card ghi để tránh đụng độ TFT
+    if (xGuiSemaphore != NULL && xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+        FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
+        if (file) {
+            StaticJsonDocument<512> doc;
+            doc["sleepTimeout"] = (state.sleepTimeout > 300) ? 60 : state.sleepTimeout;
+            doc["oledBrightness"] = state.oledBrightness;
+            doc["brightness"] = state.brightness;
+            doc["temperature"] = state.temperature;
+            doc["bgFilePath"] = state.bgFilePath;
+            
+            String jsonStr;
+            serializeJson(doc, jsonStr);
+            file.print(jsonStr);
+            file.close();
+        }
+        xSemaphoreGive(xGuiSemaphore);
     }
 }
 

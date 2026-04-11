@@ -133,7 +133,6 @@ void AppLogic::handleEvents() {
         ui_needs_update = true; 
         
         if (event == ENC_LONG_PRESS) {
-            Serial.println("[APP] Event: ENC_LONG_PRESS");
             if (isViewingFile || isViewingImage) {
                 isViewingFile = false;
                 isViewingImage = false; 
@@ -348,7 +347,6 @@ void AppLogic::handleEvents() {
 }
 
 void AppLogic::enterMenu(int level) {
-    Serial.printf("\n[APP] ---> enterMenu(%d)\n", level);
     appState.currentMenu = (MenuLevel)level;
     appState.menuIndex = 0;
     
@@ -416,7 +414,6 @@ void AppLogic::enterMenu(int level) {
 }
 
 void AppLogic::exitMenu() {
-    Serial.println("[APP] <--- exitMenu()");
     if (appState.currentMenu == MENU_STOCK || appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 
