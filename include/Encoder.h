@@ -20,6 +20,8 @@ private:
     uint8_t lastButtonState = HIGH;
     uint32_t buttonPressTime = 0;
     bool isLongPressHandled = false;
+    uint32_t last_enc_time = 0;    // ← THÊM DÒNG NÀY
+    uint32_t btnDebounceTime = 0;  // ← THÊM DÒNG NÀY (để khỏi dùng static trong loop)
 };
 
 extern EncoderLogic encoder;
