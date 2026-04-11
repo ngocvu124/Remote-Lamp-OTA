@@ -5,7 +5,7 @@
 
 SystemLogic sys;
 RemoteState appState;
-
+char cachedSSID[32] = "Not configured";
 RTC_DATA_ATTR int savedBrightness = 50;
 RTC_DATA_ATTR int savedOledBrightness = 50;
 

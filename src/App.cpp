@@ -378,10 +378,6 @@ void AppLogic::enterMenu(int level) {
     else if (level == MENU_ABOUT) { 
         char* about_text = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (about_text) {
-            WiFi.mode(WIFI_STA); 
-            String savedSSID = WiFi.SSID();
-            if (savedSSID.length() == 0) savedSSID = "Not configured";
-            
             sprintf(about_text,
                 "Author: Ngoc Vu\n"
                 "Firmware: %s\n"
@@ -393,7 +389,7 @@ void AppLogic::enterMenu(int level) {
                 "Lamp Bright: %d%%\n"
                 "Lamp Temp: %d%%",
                 FIRMWARE_VERSION,
-                savedSSID.c_str(),
+                cachedSSID,
                 appState.sleepTimeout,
                 appState.oledBrightness,
                 appState.brightness,

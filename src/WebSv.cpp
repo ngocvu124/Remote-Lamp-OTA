@@ -17,6 +17,7 @@ WebServerLogic webServer;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern SdFs sd_bg; 
 
+
 // --- HÀM XÓA ĐỆ QUY CHỐNG LẶP VÔ HẠN VÀ TRÀN STACK ---
 static bool deleteRecursive(const String& path) {
     FsFile target = sd_bg.open(path.c_str(), O_READ);
@@ -349,6 +350,7 @@ bool WebServerLogic::runWiFiSetup() {
     xTaskCreatePinnedToCore(webTask, "WebTask", 16384, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
     while (isRunning) vTaskDelay(pdMS_TO_TICKS(100));
     return WiFi.status() == WL_CONNECTED;
+    strncpy(cachedSSID, WiFi.SSID().c_str(), sizeof(cachedSSID));
 }
 
 void WebServerLogic::runBgUpload() {

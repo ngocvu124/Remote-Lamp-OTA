@@ -10,6 +10,9 @@
 #define FIRMWARE_VERSION "v1.6.0.0"
 #define FIRMWARE_NAME "Fix Temperature issue"
 
+// --- CẤU HÌNH WIFI
+extern char cachedSSID[32];
+
 // --- CẤU HÌNH KẾT NỐI ESP-NOW ---
 #define WIFI_CHANNEL 6 
 const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
