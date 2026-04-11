@@ -117,22 +117,22 @@ void EspNowLogic::sendInternal(struct_message msg) {
     }
 
     static unsigned long lastScan = 0;
-    if (millis() - lastScan < 2000) return;
+    static uint32_t scanInterval = 2000; // Bắt đầu từ 2s
+
+    if (millis() - lastScan < scanInterval) return;
     lastScan = millis();
 
     for (int ch = 1; ch <= 11; ch++) {
-        if (ch == 6) continue;
-
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
-        esp_now_send(BROADCAST_ADDRESS,
-                     (uint8_t *)&myData,
-                     sizeof(myData));
-                     
-        vTaskDelay(pdMS_TO_TICKS(15)); // Đổi delay thành vTaskDelay
-
+        esp_now_send(BROADCAST_ADDRESS, (uint8_t *)&myData, sizeof(myData));
+        vTaskDelay(pdMS_TO_TICKS(15));
         if (foundNodeA) {
             currentChannel = ch;
-            break;
+            scanInterval = 2000; // ← Tìm thấy: reset về bình thường
+            return;
         }
     }
+
+    // Không tìm thấy: tăng interval lên gấp đôi, tối đa 30 giây
+    scanInterval = min(scanInterval * 2, (uint32_t)30000);
 }
