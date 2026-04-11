@@ -136,11 +136,17 @@ void DisplayLogic::begin() {
     lv_indev_drv_init(&indev_drv);
     indev_drv.type = LV_INDEV_TYPE_ENCODER;
     indev_drv.read_cb = my_indev_read;
-    lv_indev_drv_register(&indev_drv);
+    lv_indev_t * indev_encoder = lv_indev_drv_register(&indev_drv);
+
+    // TẠO GROUP MẶC ĐỊNH: Bắt buộc phải có để tránh lỗi StoreProhibited!
+    // LVGL và UI Builder sẽ tự động gán các widget cần tương tác vào group này.
+    lv_group_t * g = lv_group_create();
+    lv_group_set_default(g);
+    lv_indev_set_group(indev_encoder, g);
 
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
     bootPrint("UI", "Building screens");
-    create_screens(); 
+    ui_init(); // Dùng ui_init() để nạp đầy đủ Theme và Fonts mặc định
     
     if (objects.stock_roller != NULL) {
         lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
