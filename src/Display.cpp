@@ -430,6 +430,11 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
     }
 
+    // [QUAN TRỌNG] Gỡ ảnh khỏi màn hình TRƯỚC KHI giải phóng bộ nhớ để tránh LVGL render vào vùng nhớ rác
+    if (preview_img_obj) {
+        lv_img_set_src(preview_img_obj, NULL);
+    }
+
     if (preview_data_buffer != NULL) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
     
     size_t allocSize = (fileSize > 115200) ? 115200 : fileSize;
@@ -470,8 +475,9 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
 }
 
 void DisplayLogic::closeImagePreview() {
+    // Thay "" thành NULL để xóa rỗng bộ đệm của obj
+    if (preview_img_obj) { lv_img_set_src(preview_img_obj, NULL); }
     if (preview_data_buffer != NULL) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
-    if (preview_img_obj) { lv_img_set_src(preview_img_obj, ""); }
     
     if (lv_scr_act() == scr_image_preview && objects.menu != NULL) {
         lv_scr_load(objects.menu);
