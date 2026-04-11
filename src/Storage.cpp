@@ -1,6 +1,7 @@
 #include "Storage.h"
 #include <esp_heap_caps.h>
 #include <ArduinoJson.h>
+#include <SPI.h>
 
 StorageLogic storage;
 extern SdFs sd_bg; 
@@ -15,6 +16,10 @@ void StorageLogic::begin() {
     pinMode(SD_CS_PIN, OUTPUT);
     digitalWrite(SD_CS_PIN, HIGH);
     vTaskDelay(pdMS_TO_TICKS(20));
+
+    // BẮT BUỘC: Định tuyến chân cắm cho Global SPI. 
+    // Nếu không, SdFat sẽ mò nhầm sang các chân mặc định của ESP32-S3 (11, 12, 13) và báo lỗi mù!
+    SPI.begin(TFT_SCLK, TFT_MISO, TFT_MOSI, -1);
 
     // Phải kiểm tra kết quả trả về và bật cờ isReady
     if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4)))) {
