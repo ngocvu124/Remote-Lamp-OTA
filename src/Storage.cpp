@@ -25,29 +25,9 @@ void StorageLogic::begin() {
         sd_bg.mkdir("/background");
     }
     
-    loadFiles();
     loadBgFiles(); 
 }
 
-void StorageLogic::loadFiles() {
-    if (!isReady) return;
-    fileCount = 0;
-    FsFile dir = sd_bg.open("/", O_READ); 
-    if (!dir) return;
-    dir.rewindDirectory();
-    
-    while (fileCount < 15) {
-        FsFile file = dir.openNextFile();
-        if (!file) break; 
-        if (!file.isDirectory()) {
-            file.getName(fileNames[fileCount], 32);
-            fileCount++; 
-        }
-        file.close();
-    }
-    dir.close();
-    Serial.printf("[STORAGE] Loaded %d files in ROOT\n", fileCount);
-}
 
 void StorageLogic::loadBgFiles() {
     if (!isReady) return;
@@ -69,37 +49,6 @@ void StorageLogic::loadBgFiles() {
     Serial.printf("[STORAGE] Loaded %d files in /background\n", bgFileCount);
 }
 
-char* StorageLogic::readFileToPSRAM(const char* filename) {
-    if (!isReady) return NULL;
-    FsFile file = sd_bg.open(filename, O_READ);
-    if (!file) return NULL;
-
-    size_t fileSize = file.size();
-    if (fileSize == 0 || fileSize > 1024 * 1024) { 
-        file.close();
-        return NULL;
-    }
-
-    char* buffer = (char*)heap_caps_malloc(fileSize + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (buffer) {
-        size_t totalRead = 0;
-        char temp_buf[1024]; 
-        while (totalRead < fileSize) {
-            size_t toRead = (fileSize - totalRead > 1024) ? 1024 : (fileSize - totalRead);
-            int r = file.read(temp_buf, toRead);
-            if (r <= 0) break;
-            memcpy(buffer + totalRead, temp_buf, r);
-            totalRead += r;
-        }
-        buffer[totalRead] = '\0'; 
-    }
-    file.close();
-    return buffer;
-}
-
-void StorageLogic::freePSRAMBuffer(char* buffer) {
-    if (buffer) heap_caps_free(buffer);
-}
 
 void StorageLogic::saveConfig(RemoteState &state) {
     if (!isReady) return;

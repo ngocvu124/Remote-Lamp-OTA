@@ -121,5 +121,3 @@ void OtaLogic::begin(const char* firmwareUrl) {
     }
     otaStarted = false; 
 }
-
-void OtaLogic::loop() {}

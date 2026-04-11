@@ -340,7 +340,7 @@ void DisplayLogic::showFileContent(const char* title, const char* content) {
     if (title != NULL && strcmp(title, "SCROLL_DOWN") == 0) { if (file_overlay) lv_obj_scroll_by(file_overlay, 0, -40, LV_ANIM_ON); return; }
 
     if (file_overlay != NULL) { lv_obj_del(file_overlay); file_overlay = NULL; }
-    if (current_file_buffer != NULL) { storage.freePSRAMBuffer(current_file_buffer); current_file_buffer = NULL; }
+    if (current_file_buffer != NULL) { heap_caps_free(current_file_buffer); current_file_buffer = NULL; }
     if (title == NULL && content == NULL) return; 
 
     current_file_buffer = (char*)content;
