@@ -420,10 +420,16 @@ void DisplayLogic::closeProgressPopup() {
 }
 
 bool DisplayLogic::showImagePreview(FsFile& file) {
-    if(!file) return false;
+    if(!file) {
+        Serial.println("[DISPLAY] Error: File is invalid or not open!");
+        return false;
+    }
     
     size_t fileSize = file.size();
-    if (fileSize < 100) return false;
+    if (fileSize < 100) {
+        Serial.printf("[DISPLAY] Error: File too small (%d bytes)\n", fileSize);
+        return false;
+    }
 
     if (!scr_image_preview) {
         scr_image_preview = lv_obj_create(NULL);
@@ -464,13 +470,13 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         if (!preview_img_obj) {
             preview_img_obj = lv_img_create(scr_image_preview);
             lv_obj_center(preview_img_obj);
-        } else {
-            lv_img_set_src(preview_img_obj, ""); // Clear src cũ để ép LVGL nạp lại ảnh mới
         }
         lv_img_set_src(preview_img_obj, &preview_img_dsc);
         lv_scr_load(scr_image_preview);
+        Serial.println("[DISPLAY] Preview loaded successfully");
         return true;
     }
+    Serial.println("[DISPLAY] Error: Read 0 bytes from file!");
     return false;
 }
 
