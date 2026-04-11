@@ -203,18 +203,24 @@ void DisplayLogic::loadBackgroundFromSD() {
             
             lv_img_cache_invalidate_src(NULL);
             
-            lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
-            lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
-            lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
-            
-            lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
-            lv_obj_set_style_bg_opa(objects.main, 0, 0);
-            lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
-            lv_obj_set_style_bg_opa(objects.menu, 0, 0);
-            lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
-            lv_obj_set_style_bg_opa(objects.stock, 0, 0);
-            
-            lv_obj_invalidate(objects.main);
+            if (objects.main) {
+                lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
+                lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
+                lv_obj_set_style_bg_opa(objects.main, 0, 0);
+                lv_obj_invalidate(objects.main);
+            }
+            if (objects.menu) {
+                lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
+                lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
+                lv_obj_set_style_bg_opa(objects.menu, 0, 0);
+                lv_obj_invalidate(objects.menu);
+            }
+            if (objects.stock) {
+                lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
+                lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
+                lv_obj_set_style_bg_opa(objects.stock, 0, 0);
+                lv_obj_invalidate(objects.stock);
+            }
         }
     }
     file.close();
