@@ -2,8 +2,7 @@
 #define DISPLAY_LOGIC_H
 
 #include <Arduino.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7789.h>
+#include <TFT_eSPI.h>
 #include <SPI.h>
 #include "Config.h"
 #include "lvgl.h"
@@ -12,7 +11,7 @@
 class DisplayLogic {
 public:
     void begin();
-    void loop();
+    uint32_t loop();
     void updateUI(RemoteState &state);
     void setContrast(int level);
     void turnOff();

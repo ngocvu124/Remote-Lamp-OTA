@@ -7,7 +7,7 @@
 #include <SdFat.h> 
 #include "System.h"
 
-Adafruit_ST7789 tft = Adafruit_ST7789(&SPI, SCR_CS_PIN, SCR_DC_PIN, SCR_RST_PIN);
+TFT_eSPI tft = TFT_eSPI();
 DisplayLogic display;
 
 static lv_disp_draw_buf_t draw_buf;
@@ -38,23 +38,23 @@ void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
     tft.setTextWrap(false);
 
     // [TAG] màu cyan
-    tft.setTextColor(ST77XX_CYAN);
+    tft.setTextColor(TFT_CYAN);
     tft.setCursor(5, bootY);
     tft.print("[");
     tft.print(tag);
     tft.print("] ");
 
     // Nội dung màu trắng
-    tft.setTextColor(ST77XX_WHITE);
+    tft.setTextColor(TFT_WHITE);
     tft.print(msg);
     tft.print("... ");
 
     // OK/FAIL
     if (ok) {
-        tft.setTextColor(ST77XX_GREEN);
+        tft.setTextColor(TFT_GREEN);
         tft.print("OK");
     } else {
-        tft.setTextColor(ST77XX_RED);
+        tft.setTextColor(TFT_RED);
         tft.print("FAIL");
     }
 
@@ -72,10 +72,7 @@ extern "C" void action_on_stock_changed_cb(lv_event_t * e);
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
-    tft.startWrite();
-    tft.setAddrWindow(area->x1, area->y1, w, h);
-    tft.writePixels((uint16_t *)&color_p->full, w * h);
-    tft.endWrite();
+    tft.pushImage(area->x1, area->y1, w, h, (uint16_t *)&color_p->full);
     lv_disp_flush_ready(disp);
 }
 
@@ -91,15 +88,15 @@ void DisplayLogic::begin() {
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, 255);      
 
-    tft.init(240, 240); 
+    tft.begin(); 
     tft.setRotation(0); 
     tft.invertDisplay(true);
-    tft.fillScreen(ST77XX_BLACK);
+    tft.fillScreen(TFT_BLACK);
 
     // Vẽ header boot screen
     bootY = 8;
     tft.setTextSize(1);
-    tft.setTextColor(ST77XX_ORANGE);
+    tft.setTextColor(TFT_ORANGE);
     tft.setCursor(5, bootY);
     tft.print("Remote Lamp ");
     tft.print(FIRMWARE_VERSION);
@@ -120,7 +117,7 @@ void DisplayLogic::begin() {
 
     lv_init();
 
-    buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_SPIRAM);
+    buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_INTERNAL);
     if (!buf1) buf1 = (lv_color_t*)malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t)); 
     lv_disp_draw_buf_init(&draw_buf, buf1, NULL, SCREEN_WIDTH * 40);
 
@@ -209,7 +206,7 @@ void DisplayLogic::loadBackgroundFromSD() {
     file.close();
 }
 
-void DisplayLogic::loop() { lv_timer_handler(); }
+uint32_t DisplayLogic::loop() { return lv_timer_handler(); }
 
 void DisplayLogic::buildMenu(const char* items[], int count) {
     lv_obj_clean(objects.cont_menu_text); 
@@ -325,7 +322,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
 }
 
 void DisplayLogic::setContrast(int level) { ledcWrite(BACKLIGHT_CHANNEL, map(level, 0, 100, 0, 255)); }
-void DisplayLogic::turnOff() { ledcWrite(BACKLIGHT_CHANNEL, 0); tft.enableDisplay(false); }
+void DisplayLogic::turnOff() { ledcWrite(BACKLIGHT_CHANNEL, 0); tft.writecommand(0x10); /* Sleep in */ }
 
 static lv_obj_t * file_overlay = NULL;
 static char* current_file_buffer = NULL;

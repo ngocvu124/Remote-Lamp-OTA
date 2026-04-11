@@ -35,12 +35,16 @@ void guiTask(void *pvParameters) {
         uint32_t diff = currentTick - lastTick;
         lastTick = currentTick;
 
+        uint32_t delay_ms = 5;
         if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(20))) {
             lv_tick_inc(diff); 
-            display.loop(); // lần đầu gọi này sẽ render UI đè lên boot log
+            delay_ms = display.loop(); // lần đầu gọi này sẽ render UI đè lên boot log
             xSemaphoreGive(xGuiSemaphore);
         }
-        vTaskDelay(pdMS_TO_TICKS(5)); 
+        
+        if (delay_ms == 0 || delay_ms == 0xFFFFFFFF) delay_ms = 5;
+        else if (delay_ms > 50) delay_ms = 50;
+        vTaskDelay(pdMS_TO_TICKS(delay_ms)); 
     }
 }
 
