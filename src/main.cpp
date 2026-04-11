@@ -9,10 +9,14 @@
 #include "Storage.h"
 #include "WebSv.h"
 #include <SPI.h>
+#include <Update.h>
 
 SemaphoreHandle_t xGuiSemaphore = NULL;
 QueueHandle_t xEncoderQueue = NULL;
 QueueHandle_t xEspNowQueue = NULL;
+
+// Biến đếm số lần Crash liên tiếp, lưu trong RAM RTC (không bị xóa khi crash/reset)
+RTC_DATA_ATTR int crashCount = 0;
 
 volatile bool isGuiReady = false; 
 volatile bool isStorageReady = false;
@@ -123,6 +127,46 @@ void espNowTask(void *pvParameters) {
 void setup() {
     sys.begin(); 
     Serial.begin(115200);
+
+    // =========================================================================
+    // CƠ CHẾ CHỐNG BRICK TỰ ĐỘNG (AUTO ROLLBACK)
+    // =========================================================================
+    esp_reset_reason_t reason = esp_reset_reason();
+    // Nếu reset do Crash (PANIC) hoặc bị Treo (Watchdog Timeout)
+    if (reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT || reason == ESP_RST_TASK_WDT) {
+        crashCount++;
+        Serial.printf("\n[SAFE BOOT] Crash detected! Consecutive crashes: %d\n", crashCount);
+        if (crashCount >= 3) {
+            Serial.println("[SAFE BOOT] Bootloop detected! Attempting Rollback to previous firmware...");
+            if (Update.canRollBack()) {
+                Update.rollBack(); // Ép bootloader trỏ về phân vùng firmware cũ
+                Serial.println("[SAFE BOOT] Rollback successful! Rebooting into old firmware...");
+                crashCount = 0; 
+
+                // Nháy LED 7 màu báo hiệu Rollback đẳng cấp (chân 48)
+                uint8_t colors[7][3] = {
+                    {255, 0, 0},   // Đỏ
+                    {255, 127, 0}, // Cam
+                    {255, 255, 0}, // Vàng
+                    {0, 255, 0},   // Lục
+                    {0, 0, 255},   // Lam
+                    {75, 0, 130},  // Chàm
+                    {148, 0, 211}  // Tím
+                };
+                for (int i = 0; i < 14; i++) { // Quét 2 vòng cầu vồng
+                    neopixelWrite(48, colors[i % 7][0], colors[i % 7][1], colors[i % 7][2]);
+                    delay(150);
+                }
+                neopixelWrite(48, 0, 0, 0); // Tắt LED trước khi restart
+
+                ESP.restart();
+            } else {
+                Serial.println("[SAFE BOOT] Cannot rollback! No alternative firmware found.");
+            }
+        }
+    } else if (reason == ESP_RST_POWERON || reason == ESP_RST_SW || reason == ESP_RST_DEEPSLEEP) {
+        crashCount = 0; // Xóa bộ đếm nếu khởi động bình thường hoặc chủ động reset
+    }
 
     // [QUAN TRỌNG] Ép chân CS của SD Card và màn hình lên HIGH ngay lập tức.
     // Đảm bảo thẻ nhớ bị "khóa" và không đọc nhầm rác từ bus SPI lúc màn hình khởi tạo.
