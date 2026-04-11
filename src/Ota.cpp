@@ -68,15 +68,12 @@ void OtaLogic::begin(const char* firmwareUrl) {
         return;
     }
 
-    char* msg = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
-    if(!msg) msg = (char*)malloc(128);
+    char msg[128];
     strcpy(msg, "Preparing Update...\nPlease wait!");
     
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
         display.showProgressPopup("GITHUB OTA", msg, 0);
         xSemaphoreGive(xGuiSemaphore);
-    } else {
-        heap_caps_free(msg);
     }
 
     WiFiClientSecure client;
@@ -90,15 +87,12 @@ void OtaLogic::begin(const char* firmwareUrl) {
             last_update = millis();
             int percent = (cur * 100) / total;
             
-            char* msg_prog = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
-            if(!msg_prog) msg_prog = (char*)malloc(128);
+            char msg_prog[128];
             sprintf(msg_prog, "Installing Firmware...\n\nPROGRESS: %d%%\n\nDo not power off!", percent);
             
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                 display.showProgressPopup("UPDATING", msg_prog, percent);
                 xSemaphoreGive(xGuiSemaphore);
-            } else {
-                heap_caps_free(msg_prog);
             }
         }
     });
@@ -109,15 +103,12 @@ void OtaLogic::begin(const char* firmwareUrl) {
     switch (ret) {
         case HTTP_UPDATE_FAILED: {
             Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
-            char* err_msg = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM);
-            if(!err_msg) err_msg = (char*)malloc(128);
+            char err_msg[128];
             sprintf(err_msg, "Update Failed!\nError: %s\n\nPlease reset and try again.", httpUpdate.getLastErrorString().c_str());
             
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                 display.showProgressPopup("OTA ERROR", err_msg, 0);
                 xSemaphoreGive(xGuiSemaphore);
-            } else {
-                heap_caps_free(err_msg);
             }
             break;
         }

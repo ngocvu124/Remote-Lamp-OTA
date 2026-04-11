@@ -132,6 +132,9 @@ void setup() {
         xTaskCreatePinnedToCore(appTask,     "AppTask",   STACK_SYSTEM, NULL, PRIO_SYSTEM,       NULL, 1);
         xTaskCreatePinnedToCore(espNowTask,  "EspTask",   8192,         NULL, PRIO_SYSTEM + 1,   NULL, 1);
         xTaskCreatePinnedToCore(batteryTask, "BatTask",   4096,         NULL, 1,                 NULL, 1); 
+    } else {
+        Serial.println("FATAL: RTOS Resources creation failed!");
+        ESP.restart(); // Nếu cạn RAM ngay lúc khởi động, nên reset
     }
 }
 

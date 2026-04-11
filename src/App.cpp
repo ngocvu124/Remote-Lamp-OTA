@@ -26,7 +26,7 @@ static int selectedOtaIndex = -1;
 
 static bool pendingImageLoad = false;
 static uint32_t lastScrollTime = 0;
-static bool forceStockUpdate = false; // Cờ báo hiệu cho luồng chạy nền
+static volatile bool forceStockUpdate = false; // Cờ báo hiệu cho luồng chạy nền (cần volatile vì dùng xuyên Task)
 
 static FsFile openSDFallback(const char* path) {
     pinMode(SCR_CS_PIN, OUTPUT);
@@ -83,13 +83,12 @@ void otaUpdateTask(void *pvParameters) {
                 ota.begin(ota.versions[idx].url);
             }
             else if (!listFetched) {
-                char* msg_buf = (char*)heap_caps_malloc(128, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                if (!msg_buf) msg_buf = (char*)malloc(128);
+                char msg_buf[128];
                 strcpy(msg_buf, "Fetching version list...\nPlease wait!");
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                     display.showProgressPopup("CHECKING", msg_buf, 0);
                     xSemaphoreGive(xGuiSemaphore);
-                } else heap_caps_free(msg_buf);
+                }
                 bool ok = ota.fetchVersions();
                 listFetched = true;
                 if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {

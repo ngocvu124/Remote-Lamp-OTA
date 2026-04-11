@@ -187,6 +187,7 @@ static void webTask(void* pvParameters) {
             if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 String path = server->hasArg("dir") ? server->arg("dir") : "/";
                 String json = "[";
+                json.reserve(2048); // Tối ưu: Cấp phát trước bộ nhớ để chống phân mảnh Heap
                 FsFile dir = sd_bg.open(path.c_str(), O_READ);
                 if (dir && dir.isDirectory()) {
                     FsFile file;
@@ -349,15 +350,15 @@ bool WebServerLogic::runWiFiSetup() {
     // Bơm 16KB Stack cho WebTask thay vì chỉ 8KB như cũ
     xTaskCreatePinnedToCore(webTask, "WebTask", 16384, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
     while (isRunning) vTaskDelay(pdMS_TO_TICKS(100));
-    return WiFi.status() == WL_CONNECTED;
     strncpy(cachedSSID, WiFi.SSID().c_str(), sizeof(cachedSSID));
+    return WiFi.status() == WL_CONNECTED;
 }
 
 void WebServerLogic::runBgUpload() {
     if (!runWiFiSetup()) return;
     String ip = WiFi.localIP().toString();
     
-    char* msg_buf = (char*)heap_caps_malloc(256, MALLOC_CAP_SPIRAM);
+    char msg_buf[256];
     sprintf(msg_buf, "1. Up BG: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str());
     if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
         display.showProgressPopup("WEB SERVER", msg_buf, 0);
