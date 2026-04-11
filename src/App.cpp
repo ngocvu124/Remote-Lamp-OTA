@@ -339,13 +339,11 @@ void AppLogic::handleEvents() {
         }
     }
 
-    static uint32_t last_ui_update = 0;
-    if (ui_needs_update || (millis() - last_ui_update > 200)) {
+    if (ui_needs_update) {
         if (!isViewingFile && !isViewingImage && xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
             display.updateUI(appState);
             xSemaphoreGive(xGuiSemaphore);
         }
-        last_ui_update = millis();
     }
 }
 

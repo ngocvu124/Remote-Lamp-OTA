@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.5.0.0"
-#define FIRMWARE_NAME "Add About Device"
+#define FIRMWARE_VERSION "v1.6.0.0"
+#define FIRMWARE_NAME "Fix Temperature issue"
 
 // --- CẤU HÌNH KẾT NỐI ESP-NOW ---
 #define WIFI_CHANNEL 6 
