@@ -132,7 +132,7 @@ void setup() {
     // CƠ CHẾ CHỐNG BRICK TỰ ĐỘNG (AUTO ROLLBACK)
     // =========================================================================
     esp_reset_reason_t reason = esp_reset_reason();
-    if (reason == ESP_RST_POWERON || reason == ESP_RST_BROWNOUT) {
+    if (reason == ESP_RST_POWERON || reason == ESP_RST_BROWNOUT || reason == ESP_RST_SW) {
         crashCount = 0; // Chỉ reset biến khi cấp nguồn mới
     }
 

@@ -133,27 +133,27 @@ static void webTask(void* pvParameters) {
                 String fullPath = "/background" + filename;
 
                 Serial.printf("[WEB] Starting bg upload: %s\n", fullPath.c_str());
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
                     if (sd_bg.exists(fullPath.c_str())) sd_bg.remove(fullPath.c_str());
                     uploadFile = sd_bg.open(fullPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_END) {
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             }
         });
 
         server->on("/download", HTTP_GET, [server]() {
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
                 if (file) {
                     server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
@@ -169,7 +169,7 @@ static void webTask(void* pvParameters) {
                     }
                     file.close();
                 } else server->send(404, "text/plain", "File missing");
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             } else server->send(500, "text/plain", "SD busy");
         });
 
@@ -184,7 +184,7 @@ static void webTask(void* pvParameters) {
         });
 
         server->on("/list", HTTP_GET, [server]() {
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 String path = server->hasArg("dir") ? server->arg("dir") : "/";
                 String json = "[";
                 json.reserve(2048); // Tối ưu: Cấp phát trước bộ nhớ để chống phân mảnh Heap
@@ -209,7 +209,7 @@ static void webTask(void* pvParameters) {
                 }
                 json += "]";
                 server->send(200, "application/json", json);
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             } else {
                 server->send(500, "text/plain", "SD busy");
             }
@@ -218,13 +218,13 @@ static void webTask(void* pvParameters) {
         server->on("/mkdir", HTTP_POST, [server]() {
             if (!server->hasArg("path")) { server->send(400, "text/plain", "Missing path"); return; }
             String path = server->arg("path");
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 if (sd_bg.mkdir(path.c_str())) {
                     server->send(200, "text/plain", "OK");
                 } else {
                     server->send(500, "text/plain", "Failed");
                 }
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             } else {
                 server->send(500, "text/plain", "SD busy");
             }
@@ -235,13 +235,13 @@ static void webTask(void* pvParameters) {
             String path = server->hasArg("path") ? server->arg("path") : server->arg("filename");
             if (!path.startsWith("/")) path = "/" + path;
             
-            if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
                 if (deleteRecursive(path)) {
                     server->send(200, "text/plain", "OK");
                 } else {
                     server->send(500, "text/plain", "Delete Failed");
                 }
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             } else {
                 server->send(500, "text/plain", "SD Busy");
             }
@@ -251,7 +251,7 @@ static void webTask(void* pvParameters) {
             String filename = server->arg("filename");
             if (!filename.startsWith("/")) filename = "/" + filename;
             
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 FsFile file = sd_bg.open(filename.c_str(), O_READ);
                 if (file && !file.isDirectory()) { 
                     String dlName = filename;
@@ -274,7 +274,7 @@ static void webTask(void* pvParameters) {
                 } else {
                     server->send(404, "text/plain", "File missing or is directory");
                 }
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             } else {
                 server->send(500, "text/plain", "SD busy");
             }
@@ -293,24 +293,24 @@ static void webTask(void* pvParameters) {
                 String fullPath = dir + filename;
                 
                 Serial.printf("[WEB] Starting General Upload: %s\n", fullPath.c_str());
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.close(); 
                     if (sd_bg.exists(fullPath.c_str())) sd_bg.remove(fullPath.c_str()); 
                     uploadFile = sd_bg.open(fullPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_END) {
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                     if (uploadFile) {
                         uploadFile.close(); 
                         Serial.printf("[WEB] General File Uploaded Success: %u bytes\n", upload.totalSize);
                     }
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             }
         });
@@ -326,9 +326,9 @@ static void webTask(void* pvParameters) {
     server->stop();
     delete server; 
 
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
         display.closeProgressPopup();
-        xSemaphoreGive(xGuiSemaphore);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
     }
 
     vTaskDelete(NULL); 
@@ -360,9 +360,9 @@ void WebServerLogic::runBgUpload() {
     
     char msg_buf[256];
     sprintf(msg_buf, "1. Up BG: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str());
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
         display.showProgressPopup("WEB SERVER", msg_buf, 0);
-        xSemaphoreGive(xGuiSemaphore);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
     }
     isRunning = true;
     // Bơm 16KB Stack cho WebTask chống tràn bộ nhớ

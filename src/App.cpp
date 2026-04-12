@@ -48,9 +48,9 @@ void stockUpdateTask(void *pvParameters) {
                 if (forceStockUpdate || millis() - lastFetch > delayInterval || lastFetch == 0) {
                     forceStockUpdate = false;
                     
-                    if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+                    if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
                         stock.fetchAndUpdateUI(appState.stockIndex); 
-                        xSemaphoreGive(xGuiSemaphore);
+                        xSemaphoreGiveRecursive(xGuiSemaphore);
                     }
                     lastFetch = millis();
                 }
@@ -79,13 +79,13 @@ void otaUpdateTask(void *pvParameters) {
             else if (!listFetched) {
                 char msg_buf[128];
                 strcpy(msg_buf, "Fetching version list...\nPlease wait!");
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                     display.showProgressPopup("CHECKING", msg_buf, 0);
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 bool ok = ota.fetchVersions();
                 listFetched = true;
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                     display.closeProgressPopup();
                     if (!ok) {
                         display.showFileContent("OTA ERROR", "Failed to fetch versions.json!");
@@ -97,7 +97,7 @@ void otaUpdateTask(void *pvParameters) {
                         display.forceRebuild(); 
                         display.updateUI(appState);
                     }
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -137,11 +137,11 @@ void AppLogic::handleEvents() {
                 isViewingFile = false;
                 isViewingImage = false; 
                 pendingImageLoad = false;
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); 
                     display.closeProgressPopup(); 
                     display.closeImagePreview(); 
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
                     enterMenu(MENU_CONTROL);
@@ -158,10 +158,10 @@ void AppLogic::handleEvents() {
 
         if (event == ENC_UP || event == ENC_DOWN) {
             if (isViewingFile) {
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     if (event == ENC_UP) display.showFileContent("SCROLL_UP", NULL);
                     else display.showFileContent("SCROLL_DOWN", NULL);
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             }
             else if (isViewingImage && appState.currentMenu != MENU_SELECT_BG) {
@@ -200,9 +200,9 @@ void AppLogic::handleEvents() {
                     if (appState.menuIndex == storage.bgFileCount) {
                         pendingImageLoad = false;
                         isViewingImage = false; 
-                        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                             display.closeImagePreview();
-                            xSemaphoreGive(xGuiSemaphore);
+                                    xSemaphoreGiveRecursive(xGuiSemaphore);
                         }
                     } else {
                         pendingImageLoad = true;
@@ -217,10 +217,10 @@ void AppLogic::handleEvents() {
                 isViewingFile = false;
                 isViewingImage = false;
                 pendingImageLoad = false;
-                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); 
                     display.closeImagePreview();
-                    xSemaphoreGive(xGuiSemaphore);
+                    xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
                     enterMenu(MENU_CONTROL);
@@ -243,9 +243,9 @@ void AppLogic::handleEvents() {
                         else if (appState.menuIndex == 1) enterMenu(MENU_SET_BACKLIGHT);
                         else if (appState.menuIndex == 2) {
                             WiFi.mode(WIFI_STA); WiFi.disconnect(false, true); 
-                            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent("WIFI CLEARED", "WiFi deleted! Rebooting...");
-                                xSemaphoreGive(xGuiSemaphore);
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             vTaskDelay(pdMS_TO_TICKS(2000)); ESP.restart(); 
                         }
@@ -274,16 +274,16 @@ void AppLogic::handleEvents() {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 storage.saveConfig(appState); 
                                 Serial.printf("[APP] Applied new BG: %s\n", fullPath);
-                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     display.closeImagePreview();
                                     display.loadBackgroundFromSD();
-                                    xSemaphoreGive(xGuiSemaphore);
+                                    xSemaphoreGiveRecursive(xGuiSemaphore);
                                 }
                                 isViewingImage = false; exitMenu(); 
                             } else {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
-                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     FsFile file = sd_bg.open(fullPath, O_READ); 
                                     if (file) {
                                         if (display.showImagePreview(file)) {
@@ -296,7 +296,7 @@ void AppLogic::handleEvents() {
                                     } else {
                                         Serial.printf("[APP] SD Error: Could not open %s\n", fullPath);
                                     }
-                                    xSemaphoreGive(xGuiSemaphore);
+                                    xSemaphoreGiveRecursive(xGuiSemaphore);
                                 } else {
                                     Serial.println("[APP] Error: GuiSemaphore timeout in preview!");
                                 }
@@ -326,7 +326,7 @@ void AppLogic::handleEvents() {
         snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
         Serial.printf("[APP] Previewing image on scroll: %s\n", fullPath);
         
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
             FsFile file = sd_bg.open(fullPath, O_READ); 
             if (file) {
                 display.showImagePreview(file);
@@ -334,14 +334,14 @@ void AppLogic::handleEvents() {
             } else {
                 Serial.printf("[APP] SD Error on scroll: Could not open %s\n", fullPath);
             }
-            xSemaphoreGive(xGuiSemaphore);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
         }
     }
 
     if (ui_needs_update) {
-        if (!isViewingFile && !isViewingImage && xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+        if (!isViewingFile && !isViewingImage && xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
             display.updateUI(appState);
-            xSemaphoreGive(xGuiSemaphore);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
         }
     }
 }
@@ -393,18 +393,18 @@ void AppLogic::enterMenu(int level) {
                 appState.brightness,
                 appState.temperature
             );
-            if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
                 isViewingFile = true;
                 display.showFileContent("ABOUT", about_text);
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             }
         }
         encoder.setBoundaries(0, 0, false); 
     } 
     else if (level == MENU_SELECT_BG) { 
-        if (xSemaphoreTake(xGuiSemaphore, portMAX_DELAY)) {
+        if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
             storage.loadBgFiles(); 
-            xSemaphoreGive(xGuiSemaphore);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
         }
         encoder.setBoundaries(0, storage.bgFileCount, true); 
     } 
