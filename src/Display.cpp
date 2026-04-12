@@ -72,10 +72,7 @@ extern "C" void action_on_stock_changed_cb(lv_event_t * e);
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
-    tft.startWrite(); // Khóa Bus SPI độc quyền cho màn hình
-    tft.setAddrWindow(area->x1, area->y1, w, h);
-    tft.pushColors((uint16_t *)&color_p->full, w * h, true);
-    tft.endWrite();   // Nhả Bus
+    tft.pushImage(area->x1, area->y1, w, h, (uint16_t *)&color_p->full);
     lv_disp_flush_ready(disp);
 }
 
