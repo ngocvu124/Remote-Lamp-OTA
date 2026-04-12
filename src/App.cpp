@@ -114,12 +114,12 @@ void AppLogic::begin() {
     Serial.println("[APP] begin() called");
     if (appState.sleepTimeout > 300) appState.sleepTimeout = 60; // Gác cổng thêm lần nữa cho chắc
     
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
         display.loadBackgroundFromSD(); 
         encoder.setBoundaries(0, 100, false);
         encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
         display.updateUI(appState);
-        xSemaphoreGive(xGuiSemaphore);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
     } else {
         Serial.println("[APP-ERR] Failed to take GUI Semaphore in begin()");
     }

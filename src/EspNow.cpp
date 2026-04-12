@@ -41,9 +41,9 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
 
         // CÚ CHỐT RTOS: Phải lấy chìa khóa xGuiSemaphore trước khi cập nhật màn hình
         // để không bị xung đột với Luồng GuiTask đang vẽ dở
-        if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
             display.updateUI(appState);
-            xSemaphoreGive(xGuiSemaphore);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
         }
     }
 }

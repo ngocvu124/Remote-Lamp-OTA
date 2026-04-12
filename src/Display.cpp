@@ -183,15 +183,7 @@ void DisplayLogic::loadBackgroundFromSD() {
     if (!bg_data_buffer) Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
     
     if (bg_data_buffer) {
-        size_t totalRead = 0;
-        uint8_t temp_buf[2048]; 
-        while (totalRead < allocSize) {
-            size_t toRead = (allocSize - totalRead > 2048) ? 2048 : (allocSize - totalRead);
-            int r = file.read(temp_buf, toRead);
-            if (r <= 0) break;
-            memcpy(bg_data_buffer + totalRead, temp_buf, r); 
-            totalRead += r;
-        }
+        int totalRead = file.read(bg_data_buffer, allocSize);
 
         if (totalRead > 0) { 
             custom_bg.header.always_zero = 0;
@@ -472,15 +464,7 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         return false;
     }
 
-    size_t totalRead = 0;
-    uint8_t temp_buf[2048]; 
-    while (totalRead < allocSize) {
-        size_t toRead = (allocSize - totalRead > 2048) ? 2048 : (allocSize - totalRead);
-        int r = file.read(temp_buf, toRead);
-        if (r <= 0) break;
-        memcpy(preview_data_buffer + totalRead, temp_buf, r); 
-        totalRead += r;
-    }
+    int totalRead = file.read(preview_data_buffer, allocSize);
     
     if (totalRead > 0) { 
         preview_img_dsc.header.always_zero = 0;
