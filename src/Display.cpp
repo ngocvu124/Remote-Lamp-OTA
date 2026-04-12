@@ -146,7 +146,13 @@ void DisplayLogic::begin() {
 
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
     bootPrint("UI", "Building screens");
+    Serial.printf("\n[DISPLAY] Before ui_init. Free Heap: %d, PSRAM: %d\n", ESP.getFreeHeap(), ESP.getFreePsram());
     ui_init(); // Dùng ui_init() để nạp đầy đủ Theme và Fonts mặc định
+    Serial.printf("[DISPLAY] After ui_init. Free Heap: %d, PSRAM: %d\n", ESP.getFreeHeap(), ESP.getFreePsram());
+    
+    Serial.printf("[DISPLAY] Pointers -> main: %p | menu: %p | stock: %p\n", objects.main, objects.menu, objects.stock);
+    if (objects.main == NULL) Serial.println("[DISPLAY] CRITICAL ERROR: objects.main is NULL!");
+    if (objects.stock_roller == NULL) Serial.println("[DISPLAY] WARNING: objects.stock_roller is NULL!");
     
     if (objects.stock_roller != NULL) {
         lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -248,8 +254,10 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
 void DisplayLogic::forceRebuild() { lastMenuType = (MenuLevel)-1; }
 
 void DisplayLogic::updateUI(RemoteState &state) {
+    Serial.printf("[DISPLAY] updateUI() Called -> Target Menu Level: %d\n", state.currentMenu);
     // Bỏ qua việc ghi đè màn hình nếu đang ở chế độ xem trước ảnh (preview)
     if (scr_image_preview != NULL && lv_scr_act() == scr_image_preview) {
+        Serial.println("[DISPLAY] Skipping updateUI due to Image Preview active.");
         return;
     }
 

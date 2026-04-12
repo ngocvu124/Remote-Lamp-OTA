@@ -140,34 +140,9 @@ void setup() {
     if (reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT || reason == ESP_RST_TASK_WDT) {
         crashCount++;
         Serial.printf("\n[SAFE BOOT] Crash detected! Consecutive crashes: %d\n", crashCount);
-        if (crashCount >= 3) {
-            Serial.println("[SAFE BOOT] Bootloop detected! Attempting Rollback to previous firmware...");
-            if (Update.canRollBack()) {
-                Update.rollBack(); // Ép bootloader trỏ về phân vùng firmware cũ
-                Serial.println("[SAFE BOOT] Rollback successful! Rebooting into old firmware...");
-                crashCount = 0; 
-
-                // Nháy LED 7 màu báo hiệu Rollback đẳng cấp (chân 48)
-                uint8_t colors[7][3] = {
-                    {255, 0, 0},   // Đỏ
-                    {255, 127, 0}, // Cam
-                    {255, 255, 0}, // Vàng
-                    {0, 255, 0},   // Lục
-                    {0, 0, 255},   // Lam
-                    {75, 0, 130},  // Chàm
-                    {148, 0, 211}  // Tím
-                };
-                for (int i = 0; i < 14; i++) { // Quét 2 vòng cầu vồng
-                    neopixelWrite(48, colors[i % 7][0], colors[i % 7][1], colors[i % 7][2]);
-                    delay(150);
-                }
-                neopixelWrite(48, 0, 0, 0); // Tắt LED trước khi restart
-
-                ESP.restart();
-            } else {
-                Serial.println("[SAFE BOOT] Cannot rollback! No alternative firmware found.");
-            }
-        }
+        
+        // Đã xóa cơ chế Rollback ở đây. Thiết bị sẽ tiếp tục bootloop 
+        // vào firmware hiện tại để bạn có thể thoải mái đọc log.
     }
 
     // [QUAN TRỌNG] Ép chân CS của SD Card và màn hình lên HIGH ngay lập tức.
