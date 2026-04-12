@@ -20,7 +20,12 @@ extern SdFs sd_bg;
 
 // --- HÀM XÓA ĐỆ QUY CHỐNG LẶP VÔ HẠN VÀ TRÀN STACK ---
 static bool deleteRecursive(const String& path) {
-    FsFile target = sd_bg.open(path.c_str(), O_READ);
+    digitalWrite(SCR_CS_PIN, HIGH); // Ép tắt màn hình trước khi làm việc
+    FsFile target = sd_bg.open(path.c_str(), O_RDONLY);
+    if (!target) {
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+        target = sd_bg.open(path.c_str(), O_RDONLY);
+    }
     if (!target) return false;
     
     if (!target.isDirectory()) {
@@ -33,7 +38,7 @@ static bool deleteRecursive(const String& path) {
     bool success = true;
 
     // Quét từng file trong thư mục
-    while (child.openNext(&target, O_READ)) {
+    while (child.openNext(&target, O_RDONLY)) {
         char name[128];
         child.getName(name, sizeof(name));
         bool isDir = child.isDirectory();
@@ -134,19 +139,26 @@ static void webTask(void* pvParameters) {
 
                 Serial.printf("[WEB] Starting bg upload: %s\n", fullPath.c_str());
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                    digitalWrite(SCR_CS_PIN, HIGH);
                     if (uploadFile) uploadFile.close(); 
                     if (sd_bg.exists(fullPath.c_str())) sd_bg.remove(fullPath.c_str());
-                    uploadFile = sd_bg.open(fullPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+                    uploadFile = sd_bg.open(fullPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+                    if (!uploadFile) {
+                        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                        uploadFile = sd_bg.open(fullPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+                    }
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                    digitalWrite(SCR_CS_PIN, HIGH);
                     if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_END) {
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                    if (uploadFile) uploadFile.close(); 
+                    digitalWrite(SCR_CS_PIN, HIGH);
+                    if (uploadFile) { uploadFile.sync(); uploadFile.close(); }
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             }
@@ -154,7 +166,12 @@ static void webTask(void* pvParameters) {
 
         server->on("/download", HTTP_GET, [server]() {
             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                FsFile file = sd_bg.open(appState.bgFilePath, O_READ);
+                digitalWrite(SCR_CS_PIN, HIGH);
+                FsFile file = sd_bg.open(appState.bgFilePath, O_RDONLY);
+                if (!file) {
+                    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                    file = sd_bg.open(appState.bgFilePath, O_RDONLY);
+                }
                 if (file) {
                     server->sendHeader("Content-Disposition", "attachment; filename=\"bg.bin\"");
                     server->sendHeader("Connection", "close");
@@ -188,12 +205,17 @@ static void webTask(void* pvParameters) {
                 String path = server->hasArg("dir") ? server->arg("dir") : "/";
                 String json = "[";
                 json.reserve(2048); // Tối ưu: Cấp phát trước bộ nhớ để chống phân mảnh Heap
-                FsFile dir = sd_bg.open(path.c_str(), O_READ);
+                digitalWrite(SCR_CS_PIN, HIGH);
+                FsFile dir = sd_bg.open(path.c_str(), O_RDONLY);
+                if (!dir) {
+                    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                    dir = sd_bg.open(path.c_str(), O_RDONLY);
+                }
                 if (dir && dir.isDirectory()) {
                     FsFile file;
                     bool first = true;
                     dir.rewindDirectory();
-                    while (file.openNext(&dir, O_READ)) {
+                    while (file.openNext(&dir, O_RDONLY)) {
                         char name[64];
                         file.getName(name, sizeof(name));
                         if (String(name) != "System Volume Information") {
@@ -219,10 +241,13 @@ static void webTask(void* pvParameters) {
             if (!server->hasArg("path")) { server->send(400, "text/plain", "Missing path"); return; }
             String path = server->arg("path");
             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                if (sd_bg.mkdir(path.c_str())) {
+                digitalWrite(SCR_CS_PIN, HIGH);
+                if (sd_bg.exists(path.c_str()) || sd_bg.mkdir(path.c_str())) {
                     server->send(200, "text/plain", "OK");
                 } else {
-                    server->send(500, "text/plain", "Failed");
+                    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                    if (sd_bg.mkdir(path.c_str())) server->send(200, "text/plain", "OK");
+                    else server->send(500, "text/plain", "Failed");
                 }
                 xSemaphoreGiveRecursive(xGuiSemaphore);
             } else {
@@ -236,6 +261,7 @@ static void webTask(void* pvParameters) {
             if (!path.startsWith("/")) path = "/" + path;
             
             if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
+                digitalWrite(SCR_CS_PIN, HIGH);
                 if (deleteRecursive(path)) {
                     server->send(200, "text/plain", "OK");
                 } else {
@@ -252,7 +278,12 @@ static void webTask(void* pvParameters) {
             if (!filename.startsWith("/")) filename = "/" + filename;
             
             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                FsFile file = sd_bg.open(filename.c_str(), O_READ);
+                digitalWrite(SCR_CS_PIN, HIGH);
+                FsFile file = sd_bg.open(filename.c_str(), O_RDONLY);
+                if (!file) {
+                    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                    file = sd_bg.open(filename.c_str(), O_RDONLY);
+                }
                 if (file && !file.isDirectory()) { 
                     String dlName = filename;
                     int lastSlash = dlName.lastIndexOf('/');
@@ -294,19 +325,27 @@ static void webTask(void* pvParameters) {
                 
                 Serial.printf("[WEB] Starting General Upload: %s\n", fullPath.c_str());
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                    digitalWrite(SCR_CS_PIN, HIGH);
                     if (uploadFile) uploadFile.close(); 
                     if (sd_bg.exists(fullPath.c_str())) sd_bg.remove(fullPath.c_str()); 
-                    uploadFile = sd_bg.open(fullPath.c_str(), O_WRITE | O_CREAT | O_TRUNC);
+                    uploadFile = sd_bg.open(fullPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+                    if (!uploadFile) {
+                        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                        uploadFile = sd_bg.open(fullPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+                    }
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_WRITE) {
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                    digitalWrite(SCR_CS_PIN, HIGH);
                     if (uploadFile) uploadFile.write(upload.buf, upload.currentSize);
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
             } else if (upload.status == UPLOAD_FILE_END) {
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                    digitalWrite(SCR_CS_PIN, HIGH);
                     if (uploadFile) {
+                        uploadFile.sync();
                         uploadFile.close(); 
                         Serial.printf("[WEB] General File Uploaded Success: %u bytes\n", upload.totalSize);
                     }
