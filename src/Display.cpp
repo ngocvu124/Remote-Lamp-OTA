@@ -85,9 +85,6 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 }
 
 void DisplayLogic::begin() {
-    Serial.println("[DEBUG-A] DisplayLogic::begin() - Phase 1 Hardware"); 
-    Serial.flush(); delay(50);
-    
     // ── Phase 1: Khởi tạo phần cứng màn hình ──────────────────
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
