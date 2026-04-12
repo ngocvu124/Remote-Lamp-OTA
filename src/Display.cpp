@@ -176,14 +176,14 @@ void DisplayLogic::loadBackgroundFromSD() {
         bg_data_buffer = NULL; 
     }
 
-    size_t allocSize = (fileSize > 115200) ? 115200 : fileSize;
+    size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
 
     Serial.printf("[DISPLAY] BG Alloc: %d bytes. Free PSRAM: %d\n", allocSize, ESP.getFreePsram());
-    bg_data_buffer = (uint8_t*)heap_caps_malloc(allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    bg_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!bg_data_buffer) Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
     
     if (bg_data_buffer) {
-        int totalRead = file.read(bg_data_buffer, allocSize);
+        int totalRead = file.read(bg_data_buffer, (fileSize > allocSize) ? allocSize : fileSize);
 
         if (totalRead > 0) { 
             custom_bg.header.always_zero = 0;
@@ -315,12 +315,14 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 
                 if (state.currentMenu == MENU_OTA) {
                     lv_label_set_text(objects.label_menu, "Select Version");
-                    for (int i = 0; i < ota.versionCount && i < 14; i++) items[i] = ota.versions[i].name;
-                    count = ota.versionCount;
+                    // An toàn: Không để array index bị nhảy cóc tạo con trỏ rác
+                    count = (ota.versionCount > 28) ? 28 : ota.versionCount; 
+                    for (int i = 0; i < count; i++) items[i] = ota.versions[i].name;
                 } else if (state.currentMenu == MENU_SELECT_BG) {
                     lv_label_set_text(objects.label_menu, "Select BG"); 
-                    for (int i = 0; i < storage.bgFileCount; i++) items[i] = storage.bgFileNames[i];
-                    count = storage.bgFileCount;
+                    // An toàn: Không để array index bị nhảy cóc tạo con trỏ rác
+                    count = (storage.bgFileCount > 28) ? 28 : storage.bgFileCount; 
+                    for (int i = 0; i < count; i++) items[i] = storage.bgFileNames[i];
                 }
                 items[count] = "Back"; buildMenu(items, count + 1);
             }
@@ -457,16 +459,16 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
 
     if (preview_data_buffer != NULL) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
     
-    size_t allocSize = (fileSize > 115200) ? 115200 : fileSize;
+    size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
 
     Serial.printf("[DISPLAY] Preview Alloc: %d bytes. Free PSRAM: %d\n", allocSize, ESP.getFreePsram());
-    preview_data_buffer = (uint8_t*)heap_caps_malloc(allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    preview_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!preview_data_buffer) {
         Serial.println("[DISPLAY] Preview Alloc FAIL: PSRAM not available or full!");
         return false;
     }
 
-    int totalRead = file.read(preview_data_buffer, allocSize);
+    int totalRead = file.read(preview_data_buffer, (fileSize > allocSize) ? allocSize : fileSize);
     
     if (totalRead > 0) { 
         preview_img_dsc.header.always_zero = 0;
