@@ -40,10 +40,10 @@ const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
 #define SCREEN_WIDTH    240
 #define SCREEN_HEIGHT   240
 
-#define STACK_GUI       8192  
-#define STACK_NETWORK   8192  
-#define STACK_SYSTEM    8192
-#define STACK_WEB       8192  
+#define STACK_GUI       32768  
+#define STACK_NETWORK   16384  
+#define STACK_SYSTEM    16384
+#define STACK_WEB       16384   
 
 #define PRIO_INPUT      5     
 #define PRIO_GUI        4
