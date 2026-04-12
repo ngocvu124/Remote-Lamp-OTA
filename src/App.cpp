@@ -290,6 +290,10 @@ void AppLogic::handleEvents() {
                                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     digitalWrite(SCR_CS_PIN, HIGH);
                                     FsFile file = sd_bg.open(fullPath, O_RDONLY); 
+                                    if (!file) {
+                                        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                                        file = sd_bg.open(fullPath, O_RDONLY);
+                                    }
                                     if (file) {
                                         if (display.showImagePreview(file)) {
                                             isViewingImage = true;
@@ -334,6 +338,10 @@ void AppLogic::handleEvents() {
         if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
             digitalWrite(SCR_CS_PIN, HIGH);
             FsFile file = sd_bg.open(fullPath, O_RDONLY); 
+            if (!file) {
+                sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                file = sd_bg.open(fullPath, O_RDONLY);
+            }
             if (file) {
                 display.showImagePreview(file);
                 file.close();
