@@ -378,7 +378,7 @@ void AppLogic::enterMenu(int level) {
         encoder.setBoundaries(0, 5, true); 
     } 
     else if (level == MENU_ABOUT) { 
-        char* about_text = (char*)malloc(1024);
+        char* about_text = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (about_text) {
             sprintf(about_text,
                 "Author: Ngoc Vu\n"

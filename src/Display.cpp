@@ -198,7 +198,7 @@ void DisplayLogic::loadBackgroundFromSD() {
     size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
 
     Serial.printf("[DISPLAY] BG Alloc: %d bytes\n", allocSize);
-    bg_data_buffer = (uint8_t*)calloc(1, allocSize);
+    bg_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!bg_data_buffer) Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
     
     if (bg_data_buffer) {
@@ -480,7 +480,7 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
 
     Serial.printf("[DISPLAY] Preview Alloc: %d bytes\n", allocSize);
-    preview_data_buffer = (uint8_t*)calloc(1, allocSize);
+    preview_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!preview_data_buffer) {
         Serial.println("[DISPLAY] Preview Alloc FAIL: PSRAM not available or full!");
         return false;

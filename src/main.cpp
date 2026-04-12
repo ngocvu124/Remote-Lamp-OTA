@@ -141,8 +141,27 @@ void setup() {
         crashCount++;
         Serial.printf("\n[SAFE BOOT] Crash detected! Consecutive crashes: %d\n", crashCount);
         
-        // Đã xóa cơ chế Rollback ở đây. Thiết bị sẽ tiếp tục bootloop 
-        // vào firmware hiện tại để bạn có thể thoải mái đọc log.
+        if (crashCount >= 3) {
+            Serial.println("[SAFE BOOT] Bootloop detected! Attempting Rollback to previous firmware...");
+            if (Update.canRollBack()) {
+                Update.rollBack(); 
+                Serial.println("[SAFE BOOT] Rollback successful! Rebooting into old firmware...");
+                crashCount = 0; 
+
+                uint8_t colors[7][3] = {
+                    {255, 0, 0}, {255, 127, 0}, {255, 255, 0}, 
+                    {0, 255, 0}, {0, 0, 255}, {75, 0, 130}, {148, 0, 211}
+                };
+                for (int i = 0; i < 14; i++) { 
+                    neopixelWrite(48, colors[i % 7][0], colors[i % 7][1], colors[i % 7][2]);
+                    delay(150);
+                }
+                neopixelWrite(48, 0, 0, 0);
+                ESP.restart();
+            } else {
+                Serial.println("[SAFE BOOT] Cannot rollback! No alternative firmware found.");
+            }
+        }
     }
 
     // [QUAN TRỌNG] Ép chân CS của SD Card và màn hình lên HIGH ngay lập tức.

@@ -16,6 +16,20 @@ static bool current_ticker_is_crypto = false;
 static float chart_min_val = 0.0;
 static float chart_max_val = 100.0;
 
+// Tạo bộ cấp phát đặc biệt ép thư viện JSON đẩy data vào PSRAM
+struct SpiRamAllocator {
+    void* allocate(size_t size) {
+        return heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
+    }
+    void deallocate(void* pointer) {
+        heap_caps_free(pointer);
+    }
+    void* reallocate(void* ptr, size_t new_size) {
+        return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM);
+    }
+};
+using SpiRamJsonDocument = BasicJsonDocument<SpiRamAllocator>;
+
 const char* MASTER_TICKER_LIST = 
     "-GAS-\n"
     "GAS\n"
@@ -150,7 +164,7 @@ bool StockLogic::fetchYahooData(const char* ticker, float* historyData, int &las
     int httpCode = http.GET();
     
     if (httpCode == HTTP_CODE_OK) {
-        DynamicJsonDocument doc(65536); 
+        SpiRamJsonDocument doc(65536); 
         DeserializationError error = deserializeJson(doc, http.getStream());
         
         if (!error) {
@@ -193,7 +207,7 @@ bool StockLogic::fetchBinanceData(const char* ticker, float* historyData, int &l
     http.begin(url);
     int httpCode = http.GET();
     if (httpCode == HTTP_CODE_OK) {
-        DynamicJsonDocument doc(49152);
+        SpiRamJsonDocument doc(49152);
         DeserializationError error = deserializeJson(doc, http.getStream());
         
         if (!error) {

@@ -25,8 +25,18 @@ void StorageLogic::begin() {
         hasLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
     }
 
-    if (!sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI))) {
-        // Kiểm tra an toàn xem card() có NULL hay không trước khi gọi errorCode()
+    // FIX: Retry loop để chống lỗi thẻ SD chậm khởi động sau khi reset
+    bool mountSuccess = false;
+    for (int i = 0; i < 3; i++) {
+        if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI))) {
+            mountSuccess = true;
+            break;
+        }
+        Serial.println("[STORAGE] SD Mount retry...");
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    if (!mountSuccess) {
         uint8_t errCode = sd_bg.card() ? sd_bg.card()->errorCode() : 0xFF;
         Serial.printf("[STORAGE] SD Mount Failed! Error code: 0x%X\n", errCode);
         isReady = false;
