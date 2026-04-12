@@ -346,17 +346,14 @@ void DisplayLogic::setContrast(int level) { ledcWrite(BACKLIGHT_CHANNEL, map(lev
 void DisplayLogic::turnOff() { ledcWrite(BACKLIGHT_CHANNEL, 0); tft.writecommand(0x10); /* Sleep in */ }
 
 static lv_obj_t * file_overlay = NULL;
-static char* current_file_buffer = NULL;
 
 void DisplayLogic::showFileContent(const char* title, const char* content) {
     if (title != NULL && strcmp(title, "SCROLL_UP") == 0) { if (file_overlay) lv_obj_scroll_by(file_overlay, 0, 40, LV_ANIM_ON); return; }
     if (title != NULL && strcmp(title, "SCROLL_DOWN") == 0) { if (file_overlay) lv_obj_scroll_by(file_overlay, 0, -40, LV_ANIM_ON); return; }
 
     if (file_overlay != NULL) { lv_obj_del(file_overlay); file_overlay = NULL; }
-    if (current_file_buffer != NULL) { heap_caps_free(current_file_buffer); current_file_buffer = NULL; }
     if (title == NULL && content == NULL) return; 
 
-    current_file_buffer = (char*)content;
 
     file_overlay = lv_obj_create(lv_scr_act());
     lv_obj_set_size(file_overlay, 230, 230); lv_obj_center(file_overlay);
@@ -382,7 +379,7 @@ void DisplayLogic::showFileContent(const char* title, const char* content) {
     lv_obj_set_width(label_content, 200);
     lv_obj_set_style_text_font(label_content, &lv_font_montserrat_12, 0); 
     lv_obj_set_style_text_color(label_content, lv_color_hex(0xFFFFFF), 0); 
-    if (content) lv_label_set_text_static(label_content, current_file_buffer);
+    if (content) lv_label_set_text(label_content, content);
     else lv_label_set_text(label_content, "SD Card Error!");
     lv_obj_align(label_content, LV_ALIGN_TOP_LEFT, 0, 30);
 }

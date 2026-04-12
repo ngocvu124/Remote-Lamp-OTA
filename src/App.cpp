@@ -398,6 +398,9 @@ void AppLogic::enterMenu(int level) {
                 display.showFileContent("ABOUT", about_text);
                 xSemaphoreGiveRecursive(xGuiSemaphore);
             }
+            
+            // LVGL đã copy chuỗi vào bộ nhớ riêng, giải phóng biến tạm ngay lập tức
+            heap_caps_free(about_text); 
         }
         encoder.setBoundaries(0, 0, false); 
     } 
