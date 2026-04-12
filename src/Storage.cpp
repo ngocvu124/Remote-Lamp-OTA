@@ -71,9 +71,8 @@ void StorageLogic::loadBgFiles() {
     }
     dir.rewindDirectory();
     
-    while (bgFileCount < 15) {
-        FsFile file = dir.openNextFile();
-        if (!file) break;
+    FsFile file;
+    while (bgFileCount < 15 && file.openNext(&dir, O_READ)) {
         if (!file.isDirectory()) {
             file.getName(bgFileNames[bgFileCount], 32);
             bgFileCount++;
@@ -102,7 +101,8 @@ void StorageLogic::saveConfig(RemoteState &state) {
             
             String jsonStr;
             serializeJson(doc, jsonStr);
-            file.print(jsonStr);
+            file.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
+            file.sync(); // Ép thẻ SD phải ghi vật lý ngay lập tức
             file.close();
         }
         xSemaphoreGiveRecursive(xGuiSemaphore);
@@ -120,28 +120,40 @@ bool StorageLogic::loadConfig(RemoteState &state) {
 
     FsFile file = sd_bg.open("/config.json", O_READ);
     if (file) {
-        StaticJsonDocument<512> doc;
-        DeserializationError error = deserializeJson(doc, file);
-        if (!error) {
-            state.sleepTimeout = doc["sleepTimeout"] | 60;
-            // BỘ LỌC CHỐNG NGÁO LÚC ĐỌC FILE LÊN
-            if (state.sleepTimeout > 300) state.sleepTimeout = 60;
-            
-            state.oledBrightness = doc["oledBrightness"] | 50;
-            state.brightness = doc["brightness"] | 50;
-            state.temperature = doc["temperature"] | 50;
-            const char* bg = doc["bgFilePath"];
-            if (bg) {
-                // Tránh việc chuỗi không có ký tự kết thúc (null-terminated) gây lỗi tràn
-                strncpy(state.bgFilePath, bg, sizeof(state.bgFilePath) - 1);
-                state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
-            } else {
-                strcpy(state.bgFilePath, "/bg.bin");
+        size_t size = file.size();
+        if (size > 0 && size < 1024) {
+            char* buf = (char*)malloc(size + 1); // Cấp phát buffer tạm để chứa file
+            if (buf) {
+                file.read(buf, size);
+                buf[size] = '\0';
+                
+                StaticJsonDocument<512> doc;
+                DeserializationError error = deserializeJson(doc, buf); // Đọc JSON từ Buffer 100% an toàn
+                free(buf); // Dùng xong dọn ngay
+                
+                if (!error) {
+                    state.sleepTimeout = doc["sleepTimeout"] | 60;
+                    if (state.sleepTimeout > 300) state.sleepTimeout = 60;
+                    
+                    state.oledBrightness = doc["oledBrightness"] | 50;
+                    state.brightness = doc["brightness"] | 50;
+                    state.temperature = doc["temperature"] | 50;
+                    const char* bg = doc["bgFilePath"];
+                    if (bg) {
+                        strncpy(state.bgFilePath, bg, sizeof(state.bgFilePath) - 1);
+                        state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
+                    } else {
+                        strcpy(state.bgFilePath, "/bg.bin");
+                    }
+                    file.close();
+                    if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
+                    return true;
+                } else {
+                    Serial.printf("[STORAGE] JSON Parse Error: %s\n", error.c_str());
+                }
             }
         }
         file.close();
-        if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
-        return true;
     }
     if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
     
