@@ -7,6 +7,23 @@
 #include <SdFat.h> 
 #include "System.h"
 
+// Triển khai bộ cấp phát độc quyền PSRAM cho LVGL
+extern "C" {
+    void* lv_psram_malloc(size_t size) {
+        void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!ptr) ptr = malloc(size); // Fallback an toàn xuống RAM nội
+        return ptr;
+    }
+    void lv_psram_free(void* ptr) {
+        free(ptr); // free() tự động nhận diện đúng vùng nhớ để giải phóng
+    }
+    void* lv_psram_realloc(void* ptr, size_t new_size) {
+        void* new_ptr = heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!new_ptr) new_ptr = realloc(ptr, new_size); // Fallback an toàn
+        return new_ptr;
+    }
+}
+
 TFT_eSPI tft = TFT_eSPI();
 DisplayLogic display;
 
@@ -114,6 +131,11 @@ void DisplayLogic::begin() {
     bootPrint("SYS",  "Booting system");
     bootPrint("GPIO", "Initializing pins");
     bootPrint("SPI",  "Display driver loaded");
+    
+    Serial.printf("\n[SYS] PSRAM Total: %d, Free: %d\n", ESP.getPsramSize(), ESP.getFreePsram());
+    if (ESP.getPsramSize() == 0) {
+        Serial.println("[WARNING] PSRAM INIT FAILED! Falling back to Internal SRAM.");
+    }
 
     // ── Phase 2: Khởi tạo LVGL ────────────────────────────────
     bootPrint("LVGL", "Init graphics engine");
@@ -146,13 +168,7 @@ void DisplayLogic::begin() {
 
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
     bootPrint("UI", "Building screens");
-    Serial.printf("\n[DISPLAY] Before ui_init. Free Heap: %d, PSRAM: %d\n", ESP.getFreeHeap(), ESP.getFreePsram());
     ui_init(); // Dùng ui_init() để nạp đầy đủ Theme và Fonts mặc định
-    Serial.printf("[DISPLAY] After ui_init. Free Heap: %d, PSRAM: %d\n", ESP.getFreeHeap(), ESP.getFreePsram());
-    
-    Serial.printf("[DISPLAY] Pointers -> main: %p | menu: %p | stock: %p\n", objects.main, objects.menu, objects.stock);
-    if (objects.main == NULL) Serial.println("[DISPLAY] CRITICAL ERROR: objects.main is NULL!");
-    if (objects.stock_roller == NULL) Serial.println("[DISPLAY] WARNING: objects.stock_roller is NULL!");
     
     if (objects.stock_roller != NULL) {
         lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -254,10 +270,8 @@ void DisplayLogic::buildMenu(const char* items[], int count) {
 void DisplayLogic::forceRebuild() { lastMenuType = (MenuLevel)-1; }
 
 void DisplayLogic::updateUI(RemoteState &state) {
-    Serial.printf("[DISPLAY] updateUI() Called -> Target Menu Level: %d\n", state.currentMenu);
     // Bỏ qua việc ghi đè màn hình nếu đang ở chế độ xem trước ảnh (preview)
     if (scr_image_preview != NULL && lv_scr_act() == scr_image_preview) {
-        Serial.println("[DISPLAY] Skipping updateUI due to Image Preview active.");
         return;
     }
 
@@ -399,6 +413,8 @@ static lv_obj_t * ota_bar = NULL;
 void DisplayLogic::showProgressPopup(const char* title, const char* msg, int percent) {
     if (ota_overlay == NULL) {
         ota_overlay = lv_obj_create(lv_scr_act());
+        if (ota_overlay == NULL) return; // Bảo vệ Crash StoreProhibited 0x10
+        
         lv_obj_set_size(ota_overlay, 230, 230); lv_obj_center(ota_overlay);
         lv_obj_set_style_bg_color(ota_overlay, lv_color_hex(0x111111), 0);
         lv_obj_set_style_border_color(ota_overlay, lv_palette_main(LV_PALETTE_ORANGE), 0);
