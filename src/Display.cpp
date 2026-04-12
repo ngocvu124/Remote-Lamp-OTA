@@ -72,7 +72,10 @@ extern "C" void action_on_stock_changed_cb(lv_event_t * e);
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
-    tft.pushImage(area->x1, area->y1, w, h, (uint16_t *)&color_p->full);
+    tft.startWrite(); // Khóa Bus SPI độc quyền cho màn hình
+    tft.setAddrWindow(area->x1, area->y1, w, h);
+    tft.pushColors((uint16_t *)&color_p->full, w * h, true);
+    tft.endWrite();   // Nhả Bus
     lv_disp_flush_ready(disp);
 }
 
@@ -222,19 +225,22 @@ void DisplayLogic::loadBackgroundFromSD() {
             if (objects.main) {
                 lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
                 lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
-                lv_obj_set_style_bg_opa(objects.main, 0, 0);
+                lv_obj_set_style_bg_color(objects.main, lv_color_black(), 0);
+                lv_obj_set_style_bg_opa(objects.main, 255, 0); // Bắt buộc phải là 255 (LV_OPA_COVER) để xóa màn hình cũ
                 lv_obj_invalidate(objects.main);
             }
             if (objects.menu) {
                 lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
                 lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
-                lv_obj_set_style_bg_opa(objects.menu, 0, 0);
+                lv_obj_set_style_bg_color(objects.menu, lv_color_black(), 0);
+                lv_obj_set_style_bg_opa(objects.menu, 255, 0);
                 lv_obj_invalidate(objects.menu);
             }
             if (objects.stock) {
                 lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
                 lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
-                lv_obj_set_style_bg_opa(objects.stock, 0, 0);
+                lv_obj_set_style_bg_color(objects.stock, lv_color_black(), 0);
+                lv_obj_set_style_bg_opa(objects.stock, 255, 0);
                 lv_obj_invalidate(objects.stock);
             }
         }
@@ -278,13 +284,21 @@ void DisplayLogic::updateUI(RemoteState &state) {
     }
 
     if (state.currentMenu == MENU_STOCK) {
-        if (lv_scr_act() != objects.stock) { lv_scr_load(objects.stock); lastMenuType = (MenuLevel)-1; }
+        if (lv_scr_act() != objects.stock) { 
+            lv_scr_load(objects.stock); 
+            lv_obj_invalidate(objects.stock); // Ép vẽ lại toàn bộ màn hình mới
+            lastMenuType = (MenuLevel)-1; 
+        }
         if (objects.stock_roller != NULL) lv_roller_set_selected(objects.stock_roller, state.stockIndex, LV_ANIM_ON);
         return;
     }
 
     if (state.currentMenu == MENU_NONE || state.currentMenu == MENU_SET_SLEEP || state.currentMenu == MENU_SET_BACKLIGHT) {
-        if (lv_scr_act() != objects.main) { lv_scr_load(objects.main); lastMenuType = (MenuLevel)-1; }
+        if (lv_scr_act() != objects.main) { 
+            lv_scr_load(objects.main); 
+            lv_obj_invalidate(objects.main); // Ép vẽ lại toàn bộ màn hình mới
+            lastMenuType = (MenuLevel)-1; 
+        }
         if (objects.ui_batbar) lv_bar_set_value(objects.ui_batbar, state.batteryLevel, LV_ANIM_ON);
         if (objects.bat_value) lv_label_set_text_fmt(objects.bat_value, "%d%%", state.batteryLevel);
         
@@ -321,7 +335,10 @@ void DisplayLogic::updateUI(RemoteState &state) {
         if (objects.label_value) lv_label_set_text(objects.label_value, title);
     } 
     else {
-        if (lv_scr_act() != objects.menu) lv_scr_load(objects.menu);
+        if (lv_scr_act() != objects.menu) {
+            lv_scr_load(objects.menu);
+            lv_obj_invalidate(objects.menu); // Ép vẽ lại toàn bộ màn hình mới
+        }
 
         if (state.currentMenu != lastMenuType) {
             if (state.currentMenu == MENU_MAIN) {
