@@ -84,18 +84,25 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
     data->enc_diff = 0; 
 }
 
+// Macro ép buộc USB phải truyền log lên PC ngay lập tức, cấm nuốt log khi Crash
+#define TRACE_POINT(msg) do { Serial.println(msg); Serial.flush(); delay(200); } while(0)
+
 void DisplayLogic::begin() {
+    TRACE_POINT("[DISP] begin() START");
     // ── Phase 1: Khởi tạo phần cứng màn hình ──────────────────
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
     ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
     ledcWrite(BACKLIGHT_CHANNEL, 255);      
+    TRACE_POINT("[DISP] Backlight OK");
 
     tft.begin();
     tft.setSwapBytes(true); 
     tft.setRotation(2); 
     tft.invertDisplay(true);
     tft.fillScreen(TFT_BLACK);
+    TRACE_POINT("[DISP] TFT Init OK");
+    
     // Vẽ header boot screen
     bootY = 8;
     tft.setTextSize(1);
@@ -120,23 +127,22 @@ void DisplayLogic::begin() {
         Serial.println("[WARNING] PSRAM INIT FAILED! Falling back to Internal SRAM.");
     }
     
-    Serial.println("[DEBUG-B] DisplayLogic::begin() - Phase 2 LVGL Init"); 
-    Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] Phase 2: LVGL Init");
 
     // ── Phase 2: Khởi tạo LVGL ────────────────────────────────
     bootPrint("LVGL", "Init graphics engine");
 
     lv_init();
-    Serial.println("[DEBUG-C] lv_init() Done"); Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] lv_init() OK");
 
     buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_INTERNAL);
     if (!buf1) buf1 = (lv_color_t*)malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t)); 
     if (!buf1) {
-        Serial.println("\n[FATAL] lv_disp_draw_buf_init FAILED! No RAM for buf1.");
+        TRACE_POINT("[DISP] FATAL: Malloc buf1 failed");
         delay(2000); ESP.restart();
     }
     lv_disp_draw_buf_init(&draw_buf, buf1, NULL, SCREEN_WIDTH * 40);
-    Serial.println("[DEBUG-D] lv_disp_draw_buf_init Done"); Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] draw_buf_init OK");
 
     static lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
@@ -146,43 +152,47 @@ void DisplayLogic::begin() {
     disp_drv.draw_buf = &draw_buf;
     lv_disp_t * disp = lv_disp_drv_register(&disp_drv);
     if (!disp) {
-        Serial.println("\n[FATAL] lv_disp_drv_register FAILED! Memory pool exhausted.");
+        TRACE_POINT("[DISP] FATAL: disp_drv_register failed");
         delay(2000); ESP.restart();
     }
-    Serial.println("[DEBUG-E] lv_disp_drv_register Done"); Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] disp_drv_register OK");
 
     static lv_indev_drv_t indev_drv;
     lv_indev_drv_init(&indev_drv);
     indev_drv.type = LV_INDEV_TYPE_ENCODER;
     indev_drv.read_cb = my_indev_read;
     lv_indev_t * indev_encoder = lv_indev_drv_register(&indev_drv);
-    Serial.println("[DEBUG-F] lv_indev_drv_register Done"); Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] indev_drv_register OK");
 
     // TẠO GROUP MẶC ĐỊNH: Bắt buộc phải có để tránh lỗi StoreProhibited!
     // LVGL và UI Builder sẽ tự động gán các widget cần tương tác vào group này.
     lv_group_t * g = lv_group_create();
-    Serial.println("[DEBUG-G] lv_group_create Done"); Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] lv_group_create OK");
+    
     lv_group_set_default(g);
     lv_indev_set_group(indev_encoder, g);
     
-    Serial.println("[DEBUG-H] DisplayLogic::begin() - Phase 3 UI Build"); 
-    Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] Phase 3: UI Build (Calling ui_init)");
 
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
     bootPrint("UI", "Building screens");
     ui_init(); // Dùng ui_init() để nạp đầy đủ Theme và Fonts mặc định
-    Serial.println("[DEBUG-I] ui_init() Done"); Serial.flush(); delay(50);
+    TRACE_POINT("[DISP] ui_init() OK (If you see this, EEZ Studio passed!)");
     
     if (objects.stock_roller != NULL) {
         lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     }
+    TRACE_POINT("[DISP] roller event OK");
     
     scr_image_preview = lv_obj_create(NULL);
+    TRACE_POINT("[DISP] scr_image_preview created");
+    
     lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
+    TRACE_POINT("[DISP] scr_image_preview styled");
 
     bootPrint("UI", "Screens ready");
 
-    Serial.println("[DISPLAY] LVGL UI Initialized.");
+    TRACE_POINT("[DISP] begin() DONE!");
     // Phần còn lại (SD, CFG, APP) sẽ do appTask gọi bootPrint() tiếp
 }
 
