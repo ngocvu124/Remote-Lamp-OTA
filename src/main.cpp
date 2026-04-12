@@ -22,7 +22,11 @@ volatile bool isGuiReady = false;
 volatile bool isStorageReady = false;
 
 void guiTask(void *pvParameters) {
+    Serial.println("[DEBUG-5] guiTask Started. Calling display.begin()...");
+    Serial.flush(); delay(50);
     display.begin();  
+    Serial.println("[DEBUG-6] display.begin() Finished!");
+    Serial.flush(); delay(50);
     isGuiReady = true; 
 
     // Chờ appTask hoàn tất boot log + storage init
@@ -127,6 +131,12 @@ void espNowTask(void *pvParameters) {
 void setup() {
     sys.begin(); 
     Serial.begin(115200);
+    
+    // [QUAN TRỌNG] Delay 3s để đợi máy tính nhận diện lại cổng USB Native CDC
+    delay(3000); 
+    Serial.println("\n\n========================================");
+    Serial.println("[DEBUG-1] SYSTEM STARTING...");
+    Serial.flush(); delay(50);
 
     // =========================================================================
     // CƠ CHẾ CHỐNG BRICK TỰ ĐỘNG (AUTO ROLLBACK)
@@ -140,6 +150,7 @@ void setup() {
     if (reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT || reason == ESP_RST_TASK_WDT) {
         crashCount++;
         Serial.printf("\n[SAFE BOOT] Crash detected! Consecutive crashes: %d\n", crashCount);
+        Serial.flush(); delay(50);
         
         // Đã xóa cơ chế Rollback ở đây. Thiết bị sẽ tiếp tục bootloop 
         // vào firmware hiện tại để bạn có thể thoải mái đọc log.
@@ -157,6 +168,9 @@ void setup() {
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 
 
     if (xGuiSemaphore != NULL && xEncoderQueue != NULL && xEspNowQueue != NULL) {
+        Serial.println("[DEBUG-2] Semaphores created. Starting FreeRTOS Tasks...");
+        Serial.flush(); delay(50);
+        
         xTaskCreatePinnedToCore(guiTask,     "GuiTask",   16384,        NULL, PRIO_GUI,         NULL, 0);
         xTaskCreatePinnedToCore(inputTask,   "InputTask", 4096,         NULL, PRIO_INPUT,        NULL, 1);
         xTaskCreatePinnedToCore(appTask,     "AppTask",   8192,         NULL, PRIO_SYSTEM,       NULL, 1);
@@ -166,6 +180,9 @@ void setup() {
         Serial.println("FATAL: RTOS Resources creation failed!");
         ESP.restart(); // Nếu cạn RAM ngay lúc khởi động, nên reset
     }
+    
+    Serial.println("[DEBUG-3] Setup() End. Main Loop deleted.");
+    Serial.flush(); delay(50);
 }
 
 void loop() { vTaskDelete(NULL); }

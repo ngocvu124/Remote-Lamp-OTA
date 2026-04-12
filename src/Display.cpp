@@ -85,6 +85,9 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 }
 
 void DisplayLogic::begin() {
+    Serial.println("[DEBUG-A] DisplayLogic::begin() - Phase 1 Hardware"); 
+    Serial.flush(); delay(50);
+    
     // ── Phase 1: Khởi tạo phần cứng màn hình ──────────────────
     pinMode(SCR_BLK_PIN, OUTPUT);
     ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
@@ -119,11 +122,15 @@ void DisplayLogic::begin() {
     if (ESP.getPsramSize() == 0) {
         Serial.println("[WARNING] PSRAM INIT FAILED! Falling back to Internal SRAM.");
     }
+    
+    Serial.println("[DEBUG-B] DisplayLogic::begin() - Phase 2 LVGL Init"); 
+    Serial.flush(); delay(50);
 
     // ── Phase 2: Khởi tạo LVGL ────────────────────────────────
     bootPrint("LVGL", "Init graphics engine");
 
     lv_init();
+    Serial.println("[DEBUG-C] lv_init() Done"); Serial.flush(); delay(50);
 
     buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_INTERNAL);
     if (!buf1) buf1 = (lv_color_t*)malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t)); 
@@ -132,6 +139,7 @@ void DisplayLogic::begin() {
         delay(2000); ESP.restart();
     }
     lv_disp_draw_buf_init(&draw_buf, buf1, NULL, SCREEN_WIDTH * 40);
+    Serial.println("[DEBUG-D] lv_disp_draw_buf_init Done"); Serial.flush(); delay(50);
 
     static lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
@@ -144,22 +152,29 @@ void DisplayLogic::begin() {
         Serial.println("\n[FATAL] lv_disp_drv_register FAILED! Memory pool exhausted.");
         delay(2000); ESP.restart();
     }
+    Serial.println("[DEBUG-E] lv_disp_drv_register Done"); Serial.flush(); delay(50);
 
     static lv_indev_drv_t indev_drv;
     lv_indev_drv_init(&indev_drv);
     indev_drv.type = LV_INDEV_TYPE_ENCODER;
     indev_drv.read_cb = my_indev_read;
     lv_indev_t * indev_encoder = lv_indev_drv_register(&indev_drv);
+    Serial.println("[DEBUG-F] lv_indev_drv_register Done"); Serial.flush(); delay(50);
 
     // TẠO GROUP MẶC ĐỊNH: Bắt buộc phải có để tránh lỗi StoreProhibited!
     // LVGL và UI Builder sẽ tự động gán các widget cần tương tác vào group này.
     lv_group_t * g = lv_group_create();
+    Serial.println("[DEBUG-G] lv_group_create Done"); Serial.flush(); delay(50);
     lv_group_set_default(g);
     lv_indev_set_group(indev_encoder, g);
+    
+    Serial.println("[DEBUG-H] DisplayLogic::begin() - Phase 3 UI Build"); 
+    Serial.flush(); delay(50);
 
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
     bootPrint("UI", "Building screens");
     ui_init(); // Dùng ui_init() để nạp đầy đủ Theme và Fonts mặc định
+    Serial.println("[DEBUG-I] ui_init() Done"); Serial.flush(); delay(50);
     
     if (objects.stock_roller != NULL) {
         lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
