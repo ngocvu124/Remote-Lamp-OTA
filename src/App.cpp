@@ -261,8 +261,8 @@ void AppLogic::handleEvents() {
                             if (isViewingImage) {
                                 isViewingImage = false;
                                 pendingImageLoad = false;
-                                if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
-                                    display.closeImagePreview(); xSemaphoreGive(xGuiSemaphore);
+                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                                    display.closeImagePreview(); xSemaphoreGiveRecursive(xGuiSemaphore);
                                 }
                             }
                             enterMenu(MENU_CONTROL);

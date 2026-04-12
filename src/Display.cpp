@@ -261,19 +261,19 @@ void DisplayLogic::updateUI(RemoteState &state) {
 
     if (state.currentMenu == MENU_NONE || state.currentMenu == MENU_SET_SLEEP || state.currentMenu == MENU_SET_BACKLIGHT) {
         if (lv_scr_act() != objects.main) { lv_scr_load(objects.main); lastMenuType = (MenuLevel)-1; }
-        lv_bar_set_value(objects.ui_batbar, state.batteryLevel, LV_ANIM_ON);
-        lv_label_set_text_fmt(objects.bat_value, "%d%%", state.batteryLevel);
+        if (objects.ui_batbar) lv_bar_set_value(objects.ui_batbar, state.batteryLevel, LV_ANIM_ON);
+        if (objects.bat_value) lv_label_set_text_fmt(objects.bat_value, "%d%%", state.batteryLevel);
         
         int val = 0; const char* title = ""; lv_color_t arc_color;
 
         if (state.currentMenu == MENU_SET_SLEEP) {
             val = (state.sleepTimeout - 30) * 100 / (300 - 30);
-            lv_label_set_text_fmt(objects.value, "%ds", state.sleepTimeout);
+            if (objects.value) lv_label_set_text_fmt(objects.value, "%ds", state.sleepTimeout);
             title = "SLEEP TIMER"; 
             arc_color = lv_palette_main(LV_PALETTE_CYAN);
         } else if (state.currentMenu == MENU_SET_BACKLIGHT) {
             val = state.oledBrightness;
-            lv_label_set_text_fmt(objects.value, "%d%%", val);
+            if (objects.value) lv_label_set_text_fmt(objects.value, "%d%%", val);
             title = "BACKLIGHT"; 
             arc_color = lv_palette_main(LV_PALETTE_PURPLE);
         } else {
@@ -281,18 +281,20 @@ void DisplayLogic::updateUI(RemoteState &state) {
             
             if (state.isTempMode) {
                 int kelvin = map(val, 0, 100, 2700, 6500); 
-                lv_label_set_text_fmt(objects.value, "%dK", kelvin);
+                if (objects.value) lv_label_set_text_fmt(objects.value, "%dK", kelvin);
             } else {
-                lv_label_set_text_fmt(objects.value, "%d%%", val);
+                if (objects.value) lv_label_set_text_fmt(objects.value, "%d%%", val);
             }
             
             title = state.isTempMode ? "COLOR TEMP" : "BRIGHTNESS";
             arc_color = state.isTempMode ? lv_palette_main(LV_PALETTE_ORANGE) : lv_color_hex(0xffff7200);
         }
 
-        lv_bar_set_value(objects.arc_value, val, LV_ANIM_ON);
-        lv_label_set_text(objects.label_value, title);
-        lv_obj_set_style_bg_color(objects.arc_value, arc_color, LV_PART_INDICATOR);
+        if (objects.arc_value) {
+            lv_bar_set_value(objects.arc_value, val, LV_ANIM_ON);
+            lv_obj_set_style_bg_color(objects.arc_value, arc_color, LV_PART_INDICATOR);
+        }
+        if (objects.label_value) lv_label_set_text(objects.label_value, title);
     } 
     else {
         if (lv_scr_act() != objects.menu) lv_scr_load(objects.menu);

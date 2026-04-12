@@ -15,6 +15,7 @@ struct_message incomingData;
 
 int currentChannel = WIFI_CHANNEL;
 volatile bool foundNodeA = false; // Thêm volatile để chống lỗi tối ưu hóa khi dùng đa luồng
+volatile bool espnow_needs_update = false; // Cờ báo hiệu cho AppTask
 
 extern RemoteState appState;
 extern DisplayLogic display;
@@ -33,18 +34,8 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
         appState.brightness  = incomingData.brightness;
         appState.temperature = incomingData.temperature;
 
-        if (appState.isTempMode) {
-            encoder.setEncoderValue(appState.temperature);
-        } else {
-            encoder.setEncoderValue(appState.brightness);
-        }
-
-        // CÚ CHỐT RTOS: Phải lấy chìa khóa xGuiSemaphore trước khi cập nhật màn hình
-        // để không bị xung đột với Luồng GuiTask đang vẽ dở
-        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
-            display.updateUI(appState);
-            xSemaphoreGiveRecursive(xGuiSemaphore);
-        }
+        // Chỉ phất cờ, KHÔNG CHẠM VÀO MÀN HÌNH Ở ĐÂY
+        espnow_needs_update = true; 
     }
 }
 

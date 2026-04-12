@@ -71,9 +71,9 @@ void OtaLogic::begin(const char* firmwareUrl) {
     char msg[128];
     strcpy(msg, "Preparing Update...\nPlease wait!");
     
-    if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
         display.showProgressPopup("GITHUB OTA", msg, 0);
-        xSemaphoreGive(xGuiSemaphore);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
     }
 
     WiFiClientSecure client;
@@ -90,9 +90,9 @@ void OtaLogic::begin(const char* firmwareUrl) {
             char msg_prog[128];
             sprintf(msg_prog, "Installing Firmware...\n\nPROGRESS: %d%%\n\nDo not power off!", percent);
             
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                 display.showProgressPopup("UPDATING", msg_prog, percent);
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             }
         }
     });
@@ -106,9 +106,9 @@ void OtaLogic::begin(const char* firmwareUrl) {
             char err_msg[128];
             sprintf(err_msg, "Update Failed!\nError: %s\n\nPlease reset and try again.", httpUpdate.getLastErrorString().c_str());
             
-            if (xSemaphoreTake(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                 display.showProgressPopup("OTA ERROR", err_msg, 0);
-                xSemaphoreGive(xGuiSemaphore);
+                xSemaphoreGiveRecursive(xGuiSemaphore);
             }
             break;
         }
