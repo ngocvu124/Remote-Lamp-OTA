@@ -26,11 +26,18 @@ static bool deleteRecursive(const String& path) {
         sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
         target = sd_bg.open(path.c_str(), O_RDONLY);
     }
-    if (!target) return false;
+    if (!target) {
+        // Thử xóa mù nếu không thể mở (file bị kẹt bộ nhớ đệm hoặc lỗi FAT)
+        if (sd_bg.remove(path.c_str())) return true;
+        return false;
+    }
     
     if (!target.isDirectory()) {
         target.close();
-        return sd_bg.remove(path.c_str()); // Nếu là file thì xóa luôn
+        if (sd_bg.remove(path.c_str())) return true;
+        // Nếu xóa xịt, ép khởi động lại thẻ SD và thử lại
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+        return sd_bg.remove(path.c_str());
     }
 
     target.rewindDirectory();
@@ -57,8 +64,11 @@ static bool deleteRecursive(const String& path) {
         } else {
             // Xóa file, nếu lỗi (file hỏng/khóa) thì ngắt vòng lặp để chống treo
             if (!sd_bg.remove(childPath.c_str())) {
-                success = false;
-                break;
+                sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                if (!sd_bg.remove(childPath.c_str())) {
+                    success = false;
+                    break;
+                }
             }
         }
         target.rewindDirectory(); // Đã xóa 1 phần tử nên phải quay lại đầu
@@ -66,7 +76,9 @@ static bool deleteRecursive(const String& path) {
     target.close();
     
     if (success) {
-        return sd_bg.rmdir(path.c_str()); // Cuối cùng xóa thư mục mẹ đã rỗng
+        if (sd_bg.rmdir(path.c_str())) return true;
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+        return sd_bg.rmdir(path.c_str());
     }
     return false;
 }
@@ -257,11 +269,23 @@ static void webTask(void* pvParameters) {
 
         // BẢO VỆ XÓA ĐỆ QUY TỐI ĐA VỚI portMAX_DELAY ĐỂ CHỐNG VỠ GIAO DỊCH
         server->on("/delete", HTTP_POST, [server]() {
-            String path = server->hasArg("path") ? server->arg("path") : server->arg("filename");
+            String path;
+            if (server->hasArg("path")) {
+                path = server->arg("path");
+            } else if (server->hasArg("dir") && server->hasArg("filename")) {
+                path = server->arg("dir");
+                if (!path.endsWith("/")) path += "/";
+                path += server->arg("filename");
+            } else {
+                path = server->arg("filename");
+            }
             if (!path.startsWith("/")) path = "/" + path;
             
+            Serial.printf("[WEB] Deleting path: %s\n", path.c_str());
             if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
                 digitalWrite(SCR_CS_PIN, HIGH);
+                // Đóng ngay file upload đang dở dang (nếu có) để nhả khóa file cho thẻ SD
+                if (uploadFile) uploadFile.close(); 
                 if (deleteRecursive(path)) {
                     server->send(200, "text/plain", "OK");
                 } else {
