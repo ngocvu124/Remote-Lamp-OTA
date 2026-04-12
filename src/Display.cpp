@@ -7,23 +7,6 @@
 #include <SdFat.h> 
 #include "System.h"
 
-// Triển khai bộ cấp phát độc quyền PSRAM cho LVGL
-extern "C" {
-    void* lv_psram_malloc(size_t size) {
-        void* ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!ptr) ptr = malloc(size); // Fallback an toàn xuống RAM nội
-        return ptr;
-    }
-    void lv_psram_free(void* ptr) {
-        free(ptr); // free() tự động nhận diện đúng vùng nhớ để giải phóng
-    }
-    void* lv_psram_realloc(void* ptr, size_t new_size) {
-        void* new_ptr = heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!new_ptr) new_ptr = realloc(ptr, new_size); // Fallback an toàn
-        return new_ptr;
-    }
-}
-
 TFT_eSPI tft = TFT_eSPI();
 DisplayLogic display;
 
@@ -202,14 +185,14 @@ void DisplayLogic::loadBackgroundFromSD() {
     if (fileSize < 100) { file.close(); return; } 
 
     if (bg_data_buffer != NULL) { 
-        heap_caps_free(bg_data_buffer); 
+        free(bg_data_buffer); 
         bg_data_buffer = NULL; 
     }
 
     size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
 
-    Serial.printf("[DISPLAY] BG Alloc: %d bytes. Free PSRAM: %d\n", allocSize, ESP.getFreePsram());
-    bg_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    Serial.printf("[DISPLAY] BG Alloc: %d bytes\n", allocSize);
+    bg_data_buffer = (uint8_t*)calloc(1, allocSize);
     if (!bg_data_buffer) Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
     
     if (bg_data_buffer) {
@@ -486,12 +469,12 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         lv_img_set_src(preview_img_obj, NULL);
     }
 
-    if (preview_data_buffer != NULL) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
+    if (preview_data_buffer != NULL) { free(preview_data_buffer); preview_data_buffer = NULL; }
     
     size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
 
-    Serial.printf("[DISPLAY] Preview Alloc: %d bytes. Free PSRAM: %d\n", allocSize, ESP.getFreePsram());
-    preview_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    Serial.printf("[DISPLAY] Preview Alloc: %d bytes\n", allocSize);
+    preview_data_buffer = (uint8_t*)calloc(1, allocSize);
     if (!preview_data_buffer) {
         Serial.println("[DISPLAY] Preview Alloc FAIL: PSRAM not available or full!");
         return false;
@@ -525,7 +508,7 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
 void DisplayLogic::closeImagePreview() {
     // Thay "" thành NULL để xóa rỗng bộ đệm của obj
     if (preview_img_obj) { lv_img_set_src(preview_img_obj, NULL); }
-    if (preview_data_buffer != NULL) { heap_caps_free(preview_data_buffer); preview_data_buffer = NULL; }
+    if (preview_data_buffer != NULL) { free(preview_data_buffer); preview_data_buffer = NULL; }
     
     if (lv_scr_act() == scr_image_preview && objects.menu != NULL) {
         lv_scr_load(objects.menu);

@@ -378,7 +378,7 @@ void AppLogic::enterMenu(int level) {
         encoder.setBoundaries(0, 5, true); 
     } 
     else if (level == MENU_ABOUT) { 
-        char* about_text = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        char* about_text = (char*)malloc(1024);
         if (about_text) {
             sprintf(about_text,
                 "Author: Ngoc Vu\n"
@@ -404,7 +404,7 @@ void AppLogic::enterMenu(int level) {
             }
             
             // LVGL đã copy chuỗi vào bộ nhớ riêng, giải phóng biến tạm ngay lập tức
-            heap_caps_free(about_text); 
+            free(about_text); 
         }
         encoder.setBoundaries(0, 0, false); 
     } 

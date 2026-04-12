@@ -16,14 +16,6 @@ bool otaStarted = false;
 // Link file danh sách phiên bản trên GitHub của bác
 const char* VERSIONS_URL = "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/versions.json";
 
-// Cấp phát PSRAM cho JSON để không làm tràn RAM hệ thống
-struct SpiRamAllocatorOta {
-    void* allocate(size_t size) { return heap_caps_malloc(size, MALLOC_CAP_SPIRAM); }
-    void deallocate(void* pointer) { heap_caps_free(pointer); }
-    void* reallocate(void* ptr, size_t new_size) { return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM); }
-};
-using SpiRamJsonDocumentOta = BasicJsonDocument<SpiRamAllocatorOta>;
-
 bool OtaLogic::fetchVersions() {
     versionCount = 0;
     if (WiFi.status() != WL_CONNECTED) return false;
@@ -36,7 +28,7 @@ bool OtaLogic::fetchVersions() {
     
     int httpCode = http.GET();
     if (httpCode == HTTP_CODE_OK) {
-        SpiRamJsonDocumentOta doc(16384);
+        DynamicJsonDocument doc(16384);
         DeserializationError error = deserializeJson(doc, http.getStream());
         if (!error) {
             JsonArray arr = doc.as<JsonArray>();
