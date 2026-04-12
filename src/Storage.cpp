@@ -68,7 +68,13 @@ void StorageLogic::loadBgFiles() {
         return;
     }
 
-    FsFile dir = sd_bg.open("/background", O_READ); 
+    digitalWrite(SCR_CS_PIN, HIGH); // Ép tắt màn hình trên bus SPI
+    FsFile dir = sd_bg.open("/background", O_RDONLY); 
+    if (!dir) { // Nếu lỗi, tự động Remount thẻ nhớ
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+        dir = sd_bg.open("/background", O_RDONLY);
+    }
+
     if (!dir) {
         Serial.println("[STORAGE-LOG] loadBgFiles: Failed to open /background folder!");
         if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
@@ -77,7 +83,7 @@ void StorageLogic::loadBgFiles() {
     dir.rewindDirectory();
     
     FsFile file;
-    while (bgFileCount < 15 && file.openNext(&dir, O_READ)) {
+    while (bgFileCount < 15 && file.openNext(&dir, O_RDONLY)) {
         if (!file.isDirectory()) {
             file.getName(bgFileNames[bgFileCount], 32);
             Serial.printf("[STORAGE-LOG] Found BG: %s\n", bgFileNames[bgFileCount]);
@@ -101,7 +107,13 @@ void StorageLogic::saveConfig(RemoteState &state) {
     
     // Phải khóa Bus SPI (thông qua GuiSemaphore) trước khi cho SD Card ghi để tránh đụng độ TFT
     if (xGuiSemaphore != NULL && xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-        FsFile file = sd_bg.open("/config.json", O_WRITE | O_CREAT | O_TRUNC);
+        digitalWrite(SCR_CS_PIN, HIGH);
+        // Dùng config.txt thay cho .json để tương thích chuẩn 8.3 của FAT32
+        FsFile file = sd_bg.open("/config.txt", O_WRONLY | O_CREAT | O_TRUNC);
+        if (!file) {
+            sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+            file = sd_bg.open("/config.txt", O_WRONLY | O_CREAT | O_TRUNC);
+        }
         if (file) {
             StaticJsonDocument<512> doc;
             doc["sleepTimeout"] = (state.sleepTimeout > 300) ? 60 : state.sleepTimeout;
@@ -115,9 +127,9 @@ void StorageLogic::saveConfig(RemoteState &state) {
             file.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
             file.sync(); // Ép thẻ SD phải ghi vật lý ngay lập tức
             file.close();
-            Serial.printf("[STORAGE-LOG] Config saved: %s\n", jsonStr.c_str());
+            Serial.println("[STORAGE-LOG] Config saved successfully.");
         } else {
-            Serial.println("[STORAGE-LOG] saveConfig: Failed to open /config.json for writing!");
+            Serial.println("[STORAGE-LOG] saveConfig: Failed to open /config.txt for writing!");
         }
         xSemaphoreGiveRecursive(xGuiSemaphore);
     } else {
@@ -138,10 +150,17 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         return false;
     }
 
-    FsFile file = sd_bg.open("/config.json", O_READ);
+    digitalWrite(SCR_CS_PIN, HIGH);
+    FsFile file = sd_bg.open("/config.txt", O_RDONLY);
+    if (!file) file = sd_bg.open("/config.json", O_RDONLY); // Fallback cho file cũ
+    if (!file) {
+        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+        file = sd_bg.open("/config.txt", O_RDONLY);
+        if (!file) file = sd_bg.open("/config.json", O_RDONLY);
+    }
+
     if (file) {
         size_t size = file.size();
-        Serial.printf("[STORAGE-LOG] config.json size: %d\n", size);
         if (size > 0 && size < 1024) {
             char* buf = (char*)malloc(size + 1); // Cấp phát buffer tạm để chứa file
             if (buf) {
@@ -181,7 +200,7 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         }
         file.close();
     } else {
-        Serial.println("[STORAGE-LOG] loadConfig: Failed to open /config.json. File might not exist yet.");
+        Serial.println("[STORAGE-LOG] loadConfig: Failed to open config file. File might not exist yet.");
     }
     if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
     

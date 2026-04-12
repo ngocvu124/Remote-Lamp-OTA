@@ -288,7 +288,8 @@ void AppLogic::handleEvents() {
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
                                 Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
                                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    FsFile file = sd_bg.open(fullPath, O_READ); 
+                                    digitalWrite(SCR_CS_PIN, HIGH);
+                                    FsFile file = sd_bg.open(fullPath, O_RDONLY); 
                                     if (file) {
                                         if (display.showImagePreview(file)) {
                                             isViewingImage = true;
@@ -331,7 +332,8 @@ void AppLogic::handleEvents() {
         Serial.printf("[APP] Previewing image on scroll: %s\n", fullPath);
         
         if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-            FsFile file = sd_bg.open(fullPath, O_READ); 
+            digitalWrite(SCR_CS_PIN, HIGH);
+            FsFile file = sd_bg.open(fullPath, O_RDONLY); 
             if (file) {
                 display.showImagePreview(file);
                 file.close();
