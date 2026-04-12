@@ -157,9 +157,9 @@ void setup() {
     xEspNowQueue = xQueueCreate(10, sizeof(struct_message)); 
 
     if (xGuiSemaphore != NULL && xEncoderQueue != NULL && xEspNowQueue != NULL) {
-        xTaskCreatePinnedToCore(guiTask,     "GuiTask",   STACK_GUI,    NULL, PRIO_GUI,         NULL, 0);
+        xTaskCreatePinnedToCore(guiTask,     "GuiTask",   16384,        NULL, PRIO_GUI,         NULL, 0);
         xTaskCreatePinnedToCore(inputTask,   "InputTask", 4096,         NULL, PRIO_INPUT,        NULL, 1);
-        xTaskCreatePinnedToCore(appTask,     "AppTask",   STACK_SYSTEM, NULL, PRIO_SYSTEM,       NULL, 1);
+        xTaskCreatePinnedToCore(appTask,     "AppTask",   8192,         NULL, PRIO_SYSTEM,       NULL, 1);
         xTaskCreatePinnedToCore(espNowTask,  "EspTask",   8192,         NULL, PRIO_SYSTEM + 1,   NULL, 1);
         xTaskCreatePinnedToCore(batteryTask, "BatTask",   4096,         NULL, 1,                 NULL, 1); 
     } else {

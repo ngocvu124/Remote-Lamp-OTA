@@ -144,6 +144,10 @@ void DisplayLogic::begin() {
 
     buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_INTERNAL);
     if (!buf1) buf1 = (lv_color_t*)malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t)); 
+    if (!buf1) {
+        Serial.println("\n[FATAL] lv_disp_draw_buf_init FAILED! No RAM for buf1.");
+        delay(2000); ESP.restart();
+    }
     lv_disp_draw_buf_init(&draw_buf, buf1, NULL, SCREEN_WIDTH * 40);
 
     static lv_disp_drv_t disp_drv;
@@ -152,7 +156,11 @@ void DisplayLogic::begin() {
     disp_drv.ver_res = SCREEN_HEIGHT;
     disp_drv.flush_cb = my_disp_flush;
     disp_drv.draw_buf = &draw_buf;
-    lv_disp_drv_register(&disp_drv);
+    lv_disp_t * disp = lv_disp_drv_register(&disp_drv);
+    if (!disp) {
+        Serial.println("\n[FATAL] lv_disp_drv_register FAILED! Memory pool exhausted.");
+        delay(2000); ESP.restart();
+    }
 
     static lv_indev_drv_t indev_drv;
     lv_indev_drv_init(&indev_drv);
