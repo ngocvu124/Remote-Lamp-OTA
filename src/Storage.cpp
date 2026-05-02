@@ -319,6 +319,15 @@ LOADCFG_END:
     }
 
     if (needsRewriteDefault) {
+        bool delLock = false;
+        if (xGuiSemaphore != NULL) {
+            delLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500)) == pdTRUE);
+        }
+        if (delLock || xGuiSemaphore == NULL) {
+            if (sd_bg.exists("/config.txt")) sd_bg.remove("/config.txt");
+            if (sd_bg.exists("/config.json")) sd_bg.remove("/config.json");
+            if (delLock) xSemaphoreGiveRecursive(xGuiSemaphore);
+        }
         Serial.println("[STORAGE] Rewriting default config due to invalid JSON...");
         saveConfig(state);
     }

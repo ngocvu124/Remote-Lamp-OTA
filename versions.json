@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.0.1 (Fix config recovery and OTA refresh)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.1.bin"
+  },
+  {
     "name": "v1.6.0.0 (Fix Temperature issue)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.0.bin"
   },
