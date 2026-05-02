@@ -145,10 +145,24 @@ void StorageLogic::saveConfig(RemoteState &state) {
             
             String jsonStr;
             serializeJson(doc, jsonStr);
-            file.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
+            size_t wr = file.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
             file.sync(); // Ép thẻ SD phải ghi vật lý ngay lập tức
             file.close();
-            Serial.println("[STORAGE-LOG] Config saved successfully.");
+
+            // Ghi them ban backup de co the phuc hoi neu config chinh bi hong.
+            FsFile bak = sd_bg.open("/config.bak", O_WRONLY | O_CREAT | O_TRUNC);
+            if (bak) {
+                bak.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
+                bak.sync();
+                bak.close();
+            }
+
+            if (wr == jsonStr.length()) {
+                Serial.println("[STORAGE-LOG] Config saved successfully.");
+            } else {
+                Serial.printf("[STORAGE-LOG] Config write short! expected=%u written=%u\n",
+                              (unsigned)jsonStr.length(), (unsigned)wr);
+            }
         } else {
             Serial.println("[STORAGE-LOG] saveConfig: Failed to open /config.txt for writing!");
         }
@@ -162,6 +176,7 @@ bool StorageLogic::loadConfig(RemoteState &state) {
     Serial.println("[STORAGE-LOG] loadConfig() started");
     if (!isReady) return false;
     bool needsRewriteDefault = false;
+    bool tryBackup = false;
 
     bool hasLock = false;
     if (xGuiSemaphore != NULL) {
@@ -184,11 +199,32 @@ bool StorageLogic::loadConfig(RemoteState &state) {
     if (file) {
         size_t size = file.size();
         if (size > 0 && size < 1024) {
-            char* buf = (char*)malloc(size + 1); // Cấp phát buffer tạm để chứa file
+            char* buf = (char*)calloc(size + 1, 1); // Cấp phát buffer tạm để chứa file
             if (buf) {
-                file.read(buf, size);
+                int rd = file.read(buf, size);
                 buf[size] = '\0';
-                Serial.printf("[STORAGE-LOG] Config content: %s\n", buf);
+
+                if (rd != (int)size) {
+                    Serial.printf("[STORAGE-LOG] loadConfig: Short read! expected=%u read=%d\n",
+                                  (unsigned)size, rd);
+                    free(buf);
+                    file.close();
+                    needsRewriteDefault = true;
+                    tryBackup = true;
+                    goto LOADCFG_END;
+                }
+
+                // Sanity-check: config phai bat dau bang '{' (bo qua khoang trang).
+                char* p = buf;
+                while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+                if (*p != '{') {
+                    Serial.println("[STORAGE-LOG] loadConfig: Corrupted config (not JSON object)");
+                    free(buf);
+                    file.close();
+                    needsRewriteDefault = true;
+                    tryBackup = true;
+                    goto LOADCFG_END;
+                }
                 
                 StaticJsonDocument<512> doc;
                 DeserializationError error = deserializeJson(doc, buf); // Đọc JSON từ Buffer 100% an toàn
@@ -214,17 +250,23 @@ bool StorageLogic::loadConfig(RemoteState &state) {
                 } else {
                     Serial.printf("[STORAGE] JSON Parse Error: %s\n", error.c_str());
                     needsRewriteDefault = true;
+                    tryBackup = true;
                 }
             } else {
                 Serial.println("[STORAGE-LOG] loadConfig: Memory allocation failed!");
             }
         } else {
             Serial.println("[STORAGE-LOG] loadConfig: Invalid file size!");
+            needsRewriteDefault = true;
+            tryBackup = true;
         }
         file.close();
     } else {
         Serial.println("[STORAGE-LOG] loadConfig: Failed to open config file. File might not exist yet.");
+        needsRewriteDefault = true;
     }
+
+LOADCFG_END:
     if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
 
     state.sleepTimeout = 60;
@@ -232,6 +274,49 @@ bool StorageLogic::loadConfig(RemoteState &state) {
     state.brightness = 50;
     state.temperature = 50;
     strcpy(state.bgFilePath, "/bg.bin");
+
+    if (tryBackup) {
+        bool bakLock = false;
+        if (xGuiSemaphore != NULL) {
+            bakLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500)) == pdTRUE);
+        }
+        if (bakLock || xGuiSemaphore == NULL) {
+            FsFile bak = sd_bg.open("/config.bak", O_RDONLY);
+            if (bak) {
+                size_t bsz = bak.size();
+                if (bsz > 0 && bsz < 1024) {
+                    char* bbuf = (char*)calloc(bsz + 1, 1);
+                    if (bbuf) {
+                        int brd = bak.read(bbuf, bsz);
+                        if (brd == (int)bsz) {
+                            StaticJsonDocument<512> bdoc;
+                            if (!deserializeJson(bdoc, bbuf)) {
+                                state.sleepTimeout = bdoc["sleepTimeout"] | 60;
+                                if (state.sleepTimeout > 300) state.sleepTimeout = 60;
+                                state.oledBrightness = bdoc["oledBrightness"] | 50;
+                                state.brightness = bdoc["brightness"] | 50;
+                                state.temperature = bdoc["temperature"] | 50;
+                                const char* bg = bdoc["bgFilePath"];
+                                if (bg) {
+                                    strncpy(state.bgFilePath, bg, sizeof(state.bgFilePath) - 1);
+                                    state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
+                                }
+                                bak.close();
+                                free(bbuf);
+                                if (bakLock) xSemaphoreGiveRecursive(xGuiSemaphore);
+                                Serial.println("[STORAGE] Recovered config from /config.bak");
+                                saveConfig(state); // Ghi lai config.txt chinh
+                                return true;
+                            }
+                        }
+                        free(bbuf);
+                    }
+                }
+                bak.close();
+            }
+            if (bakLock) xSemaphoreGiveRecursive(xGuiSemaphore);
+        }
+    }
 
     if (needsRewriteDefault) {
         Serial.println("[STORAGE] Rewriting default config due to invalid JSON...");
