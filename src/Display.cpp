@@ -215,6 +215,8 @@ void DisplayLogic::loadBackgroundFromSD() {
     if (!file) file = sd_bg.open("/bg.bin", O_RDONLY);
     if (!file) return;
 
+    file.seekSet(0);
+
     size_t fileSize = file.size();
     if (fileSize < FRAME_BYTES) {
         Serial.printf("[DISPLAY] BG file too small: %lu bytes\n", (unsigned long)fileSize);
@@ -235,6 +237,11 @@ void DisplayLogic::loadBackgroundFromSD() {
     
     if (bg_data_buffer) {
         size_t totalRead = readFully(file, bg_data_buffer, allocSize);
+        if (totalRead == 0) {
+            file.seekSet(0);
+            vTaskDelay(pdMS_TO_TICKS(2));
+            totalRead = readFully(file, bg_data_buffer, allocSize);
+        }
 
         if (totalRead == allocSize) { 
             custom_bg.header.always_zero = 0;
@@ -519,6 +526,8 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         return false;
     }
 
+    file.seekSet(0);
+
     if (!scr_image_preview) {
         scr_image_preview = lv_obj_create(NULL);
         lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
@@ -541,6 +550,11 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     }
 
     size_t totalRead = readFully(file, preview_data_buffer, allocSize);
+    if (totalRead == 0) {
+        file.seekSet(0);
+        vTaskDelay(pdMS_TO_TICKS(2));
+        totalRead = readFully(file, preview_data_buffer, allocSize);
+    }
     
     if (totalRead == allocSize) { 
         preview_img_dsc.header.always_zero = 0;

@@ -27,6 +27,19 @@ static int selectedOtaIndex = -1;
 static bool pendingImageLoad = false; // Cờ báo hiệu load ảnh preview khi cuộn
 static uint32_t lastScrollTime = 0;   // Mốc thời gian để debounce việc cuộn
 static volatile bool forceStockUpdate = false; // Cờ báo hiệu cho luồng stock (cần volatile vì dùng xuyên Task)
+static uint32_t lastConfigSaveMs = 0;
+static bool configSavePending = false;
+
+static void requestConfigSave(bool forceNow = false) {
+    const uint32_t now = millis();
+    if (forceNow || now - lastConfigSaveMs >= 1200) {
+        storage.saveConfig(appState);
+        lastConfigSaveMs = now;
+        configSavePending = false;
+    } else {
+        configSavePending = true;
+    }
+}
 
 
 void stockUpdateTask(void *pvParameters) {
@@ -191,7 +204,7 @@ void AppLogic::handleEvents() {
                         encoder.setEncoderValue(appState.brightness); 
                     }
                     espNow.send(0, appState.brightness, appState.temperature, ' ');
-                    storage.saveConfig(appState);
+                    requestConfigSave(false);
                 }
             }
             else {
@@ -260,7 +273,7 @@ void AppLogic::handleEvents() {
                         break;
                     case MENU_SET_SLEEP:         
                     case MENU_SET_BACKLIGHT:
-                        storage.saveConfig(appState); enterMenu(MENU_CONTROL); break;
+                        requestConfigSave(true); enterMenu(MENU_CONTROL); break;
                     case MENU_SELECT_BG:
                         if (appState.menuIndex == storage.bgFileCount) {
                             if (isViewingImage) {
@@ -278,7 +291,7 @@ void AppLogic::handleEvents() {
                                 pendingImageLoad = false; 
                                 strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath) - 1);
                                 appState.bgFilePath[sizeof(appState.bgFilePath) - 1] = '\0';
-                                storage.saveConfig(appState); 
+                                requestConfigSave(true); 
                                 Serial.printf("[APP] Applied new BG: %s\n", fullPath);
                                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     display.closeImagePreview();
@@ -325,11 +338,15 @@ void AppLogic::handleEvents() {
                     case MENU_NONE:
                         appState.isTempMode = !appState.isTempMode;
                         encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
-                        storage.saveConfig(appState); break;
+                        requestConfigSave(true); break;
                     default: break;
                 }
             }
         }
+    }
+
+    if (configSavePending && (millis() - lastConfigSaveMs >= 1200)) {
+        requestConfigSave(true);
     }
 
     if (pendingImageLoad && (millis() - lastScrollTime > 300)) {
@@ -457,7 +474,7 @@ void AppLogic::exitMenu() {
     appState.currentMenu = MENU_NONE;
     encoder.setBoundaries(0, 100, false);
     encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
-    storage.saveConfig(appState); 
+    requestConfigSave(true); 
 }
 
 // Hàm Callback tách rời hoàn toàn: Khi xoay con lăn chỉ cần phất cờ
