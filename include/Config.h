@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.0.1"
-#define FIRMWARE_NAME "Fix config recovery and OTA refresh"
+#define FIRMWARE_VERSION "v1.6.0.2"
+#define FIRMWARE_NAME "Fix sleep crash race and BG validation"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];
