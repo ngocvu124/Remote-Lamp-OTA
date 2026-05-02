@@ -25,6 +25,18 @@ static lv_obj_t* g_menuBtns[30];
 
 #define BACKLIGHT_CHANNEL 0
 
+static const size_t FRAME_BYTES = SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(lv_color_t);
+
+static size_t readFully(FsFile& file, uint8_t* dst, size_t bytesToRead) {
+    size_t total = 0;
+    while (total < bytesToRead) {
+        int n = file.read(dst + total, bytesToRead - total);
+        if (n <= 0) break;
+        total += (size_t)n;
+    }
+    return total;
+}
+
 // =============================================
 // BOOT LOG — dùng tft trực tiếp, không qua LVGL
 // =============================================
@@ -127,13 +139,24 @@ void DisplayLogic::begin() {
 
     lv_init();
 
-    buf1 = (lv_color_t*)heap_caps_malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t), MALLOC_CAP_INTERNAL);
-    if (!buf1) buf1 = (lv_color_t*)malloc(SCREEN_WIDTH * 40 * sizeof(lv_color_t)); 
+    // Uu tien bo dem full-frame trong PSRAM de render tron man hinh moi lan flush.
+    uint32_t drawBufPixels = SCREEN_WIDTH * SCREEN_HEIGHT;
+    buf1 = (lv_color_t*)heap_caps_malloc(FRAME_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+
+    // Fallback: neu PSRAM khong du, quay ve bo dem nho (40 lines) de he thong van chay.
+    if (!buf1) {
+        drawBufPixels = SCREEN_WIDTH * 40;
+        buf1 = (lv_color_t*)heap_caps_malloc(drawBufPixels * sizeof(lv_color_t), MALLOC_CAP_INTERNAL);
+    }
+    if (!buf1) buf1 = (lv_color_t*)malloc(drawBufPixels * sizeof(lv_color_t)); 
     if (!buf1) {
         Serial.println("\n[FATAL] lv_disp_draw_buf_init FAILED! No RAM for buf1.");
         delay(2000); ESP.restart();
     }
-    lv_disp_draw_buf_init(&draw_buf, buf1, NULL, SCREEN_WIDTH * 40);
+    lv_disp_draw_buf_init(&draw_buf, buf1, NULL, drawBufPixels);
+    Serial.printf("[DISPLAY] Draw buffer: %lu bytes (%s)\n",
+                  (unsigned long)(drawBufPixels * sizeof(lv_color_t)),
+                  (drawBufPixels == (SCREEN_WIDTH * SCREEN_HEIGHT)) ? "PSRAM full-frame" : "fallback");
 
     static lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
@@ -193,28 +216,32 @@ void DisplayLogic::loadBackgroundFromSD() {
     if (!file) return;
 
     size_t fileSize = file.size();
-    if (fileSize < 100) { file.close(); return; } 
+    if (fileSize < FRAME_BYTES) {
+        Serial.printf("[DISPLAY] BG file too small: %lu bytes\n", (unsigned long)fileSize);
+        file.close();
+        return;
+    }
 
     if (bg_data_buffer != NULL) { 
         free(bg_data_buffer); 
         bg_data_buffer = NULL; 
     }
 
-    size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
+    size_t allocSize = FRAME_BYTES; // Full frame 240x240 RGB565
 
     Serial.printf("[DISPLAY] BG Alloc: %d bytes\n", allocSize);
     bg_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!bg_data_buffer) Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
     
     if (bg_data_buffer) {
-        int totalRead = file.read(bg_data_buffer, (fileSize > allocSize) ? allocSize : fileSize);
+        size_t totalRead = readFully(file, bg_data_buffer, allocSize);
 
-        if (totalRead > 0) { 
+        if (totalRead == allocSize) { 
             custom_bg.header.always_zero = 0;
             custom_bg.header.w = 240;
             custom_bg.header.h = 240;
             custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
-            custom_bg.data_size = totalRead;
+            custom_bg.data_size = allocSize;
             custom_bg.data = bg_data_buffer;
             
             lv_img_cache_invalidate_src(NULL);
@@ -240,6 +267,9 @@ void DisplayLogic::loadBackgroundFromSD() {
                 lv_obj_set_style_bg_opa(objects.stock, 255, 0);
                 lv_obj_invalidate(objects.stock);
             }
+        } else {
+            Serial.printf("[DISPLAY] BG read short: %lu/%lu bytes\n",
+                          (unsigned long)totalRead, (unsigned long)allocSize);
         }
     }
     file.close();
@@ -484,8 +514,8 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
     }
     
     size_t fileSize = file.size();
-    if (fileSize < 100) {
-        Serial.printf("[DISPLAY] Error: File too small (%d bytes)\n", fileSize);
+    if (fileSize < FRAME_BYTES) {
+        Serial.printf("[DISPLAY] Error: File too small (%lu bytes)\n", (unsigned long)fileSize);
         return false;
     }
 
@@ -501,7 +531,7 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
 
     if (preview_data_buffer != NULL) { free(preview_data_buffer); preview_data_buffer = NULL; }
     
-    size_t allocSize = 115200; // Ép cấp phát chuẩn size màn 240x240 RGB565 chống LVGL đọc lố
+    size_t allocSize = FRAME_BYTES; // Full frame 240x240 RGB565
 
     Serial.printf("[DISPLAY] Preview Alloc: %d bytes\n", allocSize);
     preview_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -510,14 +540,14 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         return false;
     }
 
-    int totalRead = file.read(preview_data_buffer, (fileSize > allocSize) ? allocSize : fileSize);
+    size_t totalRead = readFully(file, preview_data_buffer, allocSize);
     
-    if (totalRead > 0) { 
+    if (totalRead == allocSize) { 
         preview_img_dsc.header.always_zero = 0;
         preview_img_dsc.header.w = 240;
         preview_img_dsc.header.h = 240;
         preview_img_dsc.header.cf = LV_IMG_CF_TRUE_COLOR;
-        preview_img_dsc.data_size = totalRead;
+        preview_img_dsc.data_size = allocSize;
         preview_img_dsc.data = preview_data_buffer;
 
         lv_img_cache_invalidate_src(NULL);
@@ -531,7 +561,10 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         Serial.println("[DISPLAY] Preview loaded successfully");
         return true;
     }
-    Serial.println("[DISPLAY] Error: Read 0 bytes from file!");
+    Serial.printf("[DISPLAY] Error: Preview read short %lu/%lu bytes\n",
+                  (unsigned long)totalRead, (unsigned long)allocSize);
+    free(preview_data_buffer);
+    preview_data_buffer = NULL;
     return false;
 }
 
