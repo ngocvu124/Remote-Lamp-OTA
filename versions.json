@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.0.3 (Use full-frame PSRAM rendering)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.3.bin"
+  },
+  {
     "name": "v1.6.0.2 (Fix sleep crash race and BG validation)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.2.bin"
   },
