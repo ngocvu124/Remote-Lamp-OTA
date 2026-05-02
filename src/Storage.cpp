@@ -95,9 +95,16 @@ void StorageLogic::loadBgFiles() {
     FsFile file;
     while (bgFileCount < 15 && file.openNext(&dir, O_RDONLY)) {
         if (!file.isDirectory()) {
-            file.getName(bgFileNames[bgFileCount], 32);
-            Serial.printf("[STORAGE-LOG] Found BG: %s\n", bgFileNames[bgFileCount]);
-            bgFileCount++;
+            uint32_t sz = file.size();
+            if (sz >= 115200) { // 240x240 RGB565 raw
+                file.getName(bgFileNames[bgFileCount], 32);
+                Serial.printf("[STORAGE-LOG] Found BG: %s\n", bgFileNames[bgFileCount]);
+                bgFileCount++;
+            } else {
+                char badName[32] = {0};
+                file.getName(badName, 32);
+                Serial.printf("[STORAGE-LOG] Skip BG (size=%lu): %s\n", (unsigned long)sz, badName);
+            }
         } else {
             char folderName[32];
             file.getName(folderName, 32);
