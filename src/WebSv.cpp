@@ -4,6 +4,7 @@
 #include "Storage.h"
 #include "System.h"
 #include <WiFi.h>
+#include <DNSServer.h>
 #include <esp_heap_caps.h>
 
 // Xử lý triệt để cảnh báo xung đột Macro giữa SdFat và LittleFS
@@ -16,6 +17,8 @@
 WebServerLogic webServer;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern SdFs sd_bg; 
+
+static String g_wifiOptions = ""; // Pre-scanned options truyền từ runWiFiPortal vào webTask
 
 
 // --- HÀM XÓA ĐỆ QUY CHỐNG LẶP VÔ HẠN VÀ TRÀN STACK ---
@@ -96,18 +99,17 @@ void WebServerLogic::begin() {
 static void webTask(void* pvParameters) {
     WebServerMode mode = (WebServerMode)(intptr_t)pvParameters;
     WebServer* server = new WebServer(80);
+    DNSServer* dnsServer = nullptr;
     static FsFile uploadFile; 
     
     if (mode == WEB_MODE_WIFI) {
-        int n = WiFi.scanNetworks();
-        String options = "";
-        for (int i = 0; i < n; ++i) {
-            String ssid = WiFi.SSID(i);
-            if(ssid.length() > 0) options += "<option value='" + ssid + "'>" + ssid + "</option>";
-        }
-        WiFi.scanDelete();
-        WiFi.softAP("REMOTE_LAMP");
-        
+        // Dùng options đã scan sẵn từ runWiFiPortal (AP đã được start rồi)
+        String options = g_wifiOptions;
+        g_wifiOptions = "";
+
+        dnsServer = new DNSServer();
+        dnsServer->start(53, "*", WiFi.softAPIP());
+
         server->on("/", [server, options]() {
             File file = LittleFS.open("/wifi.html", "r");
             if (!file) { server->send(500, "text/plain", "Missing wifi.html"); return; }
@@ -116,6 +118,15 @@ static void webTask(void* pvParameters) {
             html.replace("{{OPTIONS}}", options);
             server->send(200, "text/html", html);
         });
+
+        // Captive-portal checks cho Android/iOS/Windows
+        server->on("/generate_204", [server]() { server->sendHeader("Location", "http://192.168.4.1/", true); server->send(302, "text/plain", ""); });
+        server->on("/gen_204", [server]() { server->sendHeader("Location", "http://192.168.4.1/", true); server->send(302, "text/plain", ""); });
+        server->on("/hotspot-detect.html", [server]() { server->sendHeader("Location", "http://192.168.4.1/", true); server->send(302, "text/plain", ""); });
+        server->on("/library/test/success.html", [server]() { server->sendHeader("Location", "http://192.168.4.1/", true); server->send(302, "text/plain", ""); });
+        server->on("/ncsi.txt", [server]() { server->sendHeader("Location", "http://192.168.4.1/", true); server->send(302, "text/plain", ""); });
+        server->on("/connecttest.txt", [server]() { server->sendHeader("Location", "http://192.168.4.1/", true); server->send(302, "text/plain", ""); });
+        server->on("/redirect", [server]() { server->sendHeader("Location", "http://192.168.4.1/", true); server->send(302, "text/plain", ""); });
         
         server->on("/save", [server]() {
             String qsid = server->arg("ssid");
@@ -126,6 +137,11 @@ static void webTask(void* pvParameters) {
             WiFi.mode(WIFI_STA);
             WiFi.begin(qsid.c_str(), qpass.c_str());
             webServer.isRunning = false; 
+        });
+
+        server->onNotFound([server]() {
+            server->sendHeader("Location", "http://192.168.4.1/", true);
+            server->send(302, "text/plain", "");
         });
     } 
     else if (mode == WEB_MODE_UPLOAD) {
@@ -381,12 +397,17 @@ static void webTask(void* pvParameters) {
     
     server->begin();
     while(webServer.isRunning) {
+        if (mode == WEB_MODE_WIFI && dnsServer) dnsServer->processNextRequest();
         server->handleClient();
         vTaskDelay(pdMS_TO_TICKS(20));
-        if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) webServer.isRunning = false;
+        if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER && appState.currentMenu != MENU_WIFI_SETUP) webServer.isRunning = false;
         if (mode == WEB_MODE_UPLOAD && appState.currentMenu != MENU_WEB_SERVER) webServer.isRunning = false;
     }
     server->stop();
+    if (dnsServer) {
+        dnsServer->stop();
+        delete dnsServer;
+    }
     delete server; 
 
     if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
@@ -417,10 +438,61 @@ bool WebServerLogic::runWiFiSetup() {
     return WiFi.status() == WL_CONNECTED;
 }
 
+void WebServerLogic::runWiFiPortal() {
+    // Bước 1: Hiện trạng thái scanning
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+        display.showProgressPopup("WIFI SETUP", "Scanning networks...\nPlease wait!", 0);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
+    }
+
+    // Bước 2: Scan mạng (blocking, chạy trên luồng hiện tại)
+    WiFi.disconnect(false, true);
+    WiFi.mode(WIFI_AP_STA);
+    int n = WiFi.scanNetworks();
+
+    // Bước 3: Build options cho web và danh sách hiển thị trên màn hình
+    g_wifiOptions = "";
+    char* displayText = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!displayText) displayText = (char*)malloc(1024);
+    if (displayText) {
+        int pos = 0;
+        pos += snprintf(displayText + pos, 1024 - pos,
+            "1. Ket noi WiFi:\n"
+            "   SSID: REMOTE_LAMP\n"
+            "2. Mo trinh duyet:\n"
+            "   192.168.4.1\n"
+            "---Mang da quet---\n");
+        for (int i = 0; i < n && pos < 980; i++) {
+            String ssid = WiFi.SSID(i);
+            if (ssid.length() > 0) {
+                g_wifiOptions += "<option value='" + ssid + "'>" + ssid + "</option>";
+                pos += snprintf(displayText + pos, 1024 - pos, "%d. %s\n", i + 1, ssid.c_str());
+            }
+        }
+        if (n == 0) snprintf(displayText + pos, 1024 - pos, "(Khong tim thay mang)");
+    }
+    WiFi.scanDelete();
+
+    // Bước 4: Bật AP
+    WiFi.softAP("REMOTE_LAMP");
+
+    // Bước 5: Hiện danh sách mạng + hướng dẫn lên màn hình
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+        display.closeProgressPopup();
+        if (displayText) display.showFileContent("WIFI SETUP", displayText);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
+    }
+    if (displayText) free(displayText);
+
+    // Bước 6: Khởi động web server trong task riêng
+    isRunning = true;
+    xTaskCreatePinnedToCore(webTask, "WebTask", 16384, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
+}
+
 void WebServerLogic::runBgUpload() {
     if (!runWiFiSetup()) return;
     String ip = WiFi.localIP().toString();
-    
+
     char msg_buf[256];
     sprintf(msg_buf, "1. Up BG: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str());
     if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {

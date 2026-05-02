@@ -15,6 +15,7 @@ public:
     void updateUI(RemoteState &state);
     void setContrast(int level);
     void turnOff();
+    void turnOn();
     void showFileContent(const char* title, const char* content);
     void showProgressPopup(const char* title, const char* msg, int percent);
     void closeProgressPopup();

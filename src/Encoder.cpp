@@ -11,13 +11,15 @@ void IRAM_ATTR readEncoderISR() {
 }
 
 void EncoderLogic::begin() {
+    rotaryEncoder.isButtonPulldown = ROTARY_BTN_USE_PULLDOWN;
     rotaryEncoder.begin();
     rotaryEncoder.setup(readEncoderISR);
     
     // CÚ CHỐT 1: Tắt hoàn toàn gia tốc. Vặn 1 khấc là chỉ nhảy 1 đơn vị, cấm nhảy cóc!
     rotaryEncoder.disableAcceleration(); 
 
-    pinMode(ROTARY_BTN_PIN, INPUT_PULLUP);
+    pinMode(ROTARY_BTN_PIN, ROTARY_BTN_USE_PULLDOWN ? INPUT_PULLDOWN : INPUT_PULLUP);
+    lastButtonState = digitalRead(ROTARY_BTN_PIN);
     lastInteractionTime = millis();
 }
 
@@ -38,22 +40,25 @@ bool EncoderLogic::shouldSleep(uint32_t timeout) {
     return (millis() - lastInteractionTime > timeout);
 }
 
+void EncoderLogic::markInteraction() {
+    lastInteractionTime = millis();
+}
+
 void EncoderLogic::loop() {
     // ==========================================
     // 1. XỬ LÝ VẶN NÚM
     // ==========================================
     if (rotaryEncoder.encoderChanged()) {
         uint32_t current_time = millis();
+        int current_val = rotaryEncoder.readEncoder();
         if (current_time - last_enc_time > 30) { 
-            int current_val = rotaryEncoder.readEncoder();
             EncoderEvent ev = (current_val > lastEncoderValue) ? ENC_UP : ENC_DOWN;
-            lastEncoderValue = current_val;
             lastInteractionTime = current_time;
             last_enc_time = current_time;
             if (xEncoderQueue != NULL) xQueueSend(xEncoderQueue, &ev, 0);
-        } else {
-            rotaryEncoder.setEncoderValue(lastEncoderValue);
         }
+        // Luôn cập nhật lastEncoderValue để tránh so sánh sai hướng ở lần sau
+        lastEncoderValue = current_val;
     }
 
     // ==========================================
@@ -66,7 +71,7 @@ void EncoderLogic::loop() {
             btnDebounceTime = millis();
             lastButtonState = currentButtonState;
 
-            if (currentButtonState == LOW) {
+            if (currentButtonState == ROTARY_BTN_PRESSED_LEVEL) {
                 buttonPressTime = millis();
                 isLongPressHandled = false;
             } else {
@@ -80,7 +85,7 @@ void EncoderLogic::loop() {
     }
 
     // Long press
-    if (currentButtonState == LOW && !isLongPressHandled) {
+    if (currentButtonState == ROTARY_BTN_PRESSED_LEVEL && !isLongPressHandled) {
         if (millis() - buttonPressTime >= 1000) {
             isLongPressHandled = true;
             lastInteractionTime = millis();

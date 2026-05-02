@@ -15,6 +15,7 @@ public:
     bool runWiFiSetup(); 
     void runBgUpload();  
     void runWebServerOnly(); // HÀM MỚI KẾT NỐI WIFI NHÀ
+    void runWiFiPortal();    // Luôn mở AP để setup WiFi
     
     volatile bool isRunning;
 };

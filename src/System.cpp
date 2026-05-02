@@ -1,8 +1,10 @@
 #include "System.h"
 #include "Display.h"
 #include "Encoder.h"
+#include "Storage.h"
 #include "driver/rtc_io.h"
-#include "driver/gpio.h" 
+#include "driver/gpio.h"
+#include <SPI.h> 
 
 SystemLogic sys;
 RemoteState appState;
@@ -31,6 +33,22 @@ void SystemLogic::goToSleep() {
     savedOledBrightness = appState.oledBrightness;
 
     display.turnOff();
+
+    // Unmount SD card va tat SPI truoc khi sleep.
+    // gpio_deep_sleep_hold_en() se giu NGUYEN trang thai cac pin SPI (SCK/MOSI/CS).
+    // SD card (van duoc cap dien) co the doc cac tin hieu bi dong bang nhu SPI command
+    // va roi vao trang thai loi. Fix: tat SPI de tristate cac duong data, ep CS=HIGH
+    // de card biet no bi deselect va bo qua moi tin hieu nhieu trong qua trinh ngu.
+    if (storage.isReady) {
+        sd_bg.end();
+        storage.isReady = false;
+    }
+    // Ep SPI pins ve trang thai idle an toan truoc khi hold:
+    // CS=HIGH (deselect card), SCK=LOW, MOSI=LOW
+    SPI.end(); // Tat SPI peripheral, tra cac pin ve GPIO mode
+    pinMode(SD_CS_PIN, OUTPUT);   digitalWrite(SD_CS_PIN, HIGH);
+    pinMode(SPI_SCK_PIN, OUTPUT); digitalWrite(SPI_SCK_PIN, LOW);
+    pinMode(SPI_MOSI_PIN, OUTPUT); digitalWrite(SPI_MOSI_PIN, LOW);
 
     // Giu den nen tat hoan toan trong deep sleep.
     ledcDetachPin(SCR_BLK_PIN);

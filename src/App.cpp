@@ -255,6 +255,7 @@ void AppLogic::handleEvents() {
                         }
                         else if (appState.menuIndex == 3) enterMenu(MENU_SELECT_BG); 
                         else if (appState.menuIndex == 4) enterMenu(MENU_ABOUT);
+                        else if (appState.menuIndex == 5) enterMenu(MENU_WIFI_SETUP);
                         else enterMenu(MENU_MAIN);
                         break;
                     case MENU_SET_SLEEP:         
@@ -275,7 +276,8 @@ void AppLogic::handleEvents() {
                             snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
                             if (isViewingImage) {
                                 pendingImageLoad = false; 
-                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
+                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath) - 1);
+                                appState.bgFilePath[sizeof(appState.bgFilePath) - 1] = '\0';
                                 storage.saveConfig(appState); 
                                 Serial.printf("[APP] Applied new BG: %s\n", fullPath);
                                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
@@ -285,7 +287,8 @@ void AppLogic::handleEvents() {
                                 }
                                 isViewingImage = false; exitMenu(); 
                             } else {
-                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath));
+                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath) - 1);
+                                appState.bgFilePath[sizeof(appState.bgFilePath) - 1] = '\0';
                                 Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
                                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
                                     digitalWrite(SCR_CS_PIN, HIGH);
@@ -366,6 +369,14 @@ void AppLogic::enterMenu(int level) {
     
     encoder.setEncoderValue(0);
     
+    if (level == MENU_WIFI_SETUP) {
+        originalSleepTimeout = appState.sleepTimeout;
+        appState.sleepTimeout = 999999;
+        webServer.runWiFiPortal();
+        isViewingFile = true;
+        return;
+    }
+
     if (level == MENU_STOCK || level == MENU_OTA || level == MENU_WEB_SERVER) {
         originalSleepTimeout = appState.sleepTimeout;
         if (originalSleepTimeout > 300) originalSleepTimeout = 60; // Gác cổng
@@ -385,7 +396,7 @@ void AppLogic::enterMenu(int level) {
         encoder.setBoundaries(0, 5, true);         
     } 
     else if (level == MENU_CONTROL) {
-        encoder.setBoundaries(0, 5, true); 
+        encoder.setBoundaries(0, 6, true); 
     } 
     else if (level == MENU_ABOUT) { 
         char* about_text = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -431,6 +442,14 @@ void AppLogic::enterMenu(int level) {
 }
 
 void AppLogic::exitMenu() {
+    if (appState.currentMenu == MENU_WIFI_SETUP) {
+        appState.sleepTimeout = originalSleepTimeout;
+        webServer.isRunning = false;
+        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                display.showFileContent(NULL, NULL);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
+        }
+    }
     if (appState.currentMenu == MENU_STOCK || appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 

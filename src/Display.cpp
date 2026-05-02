@@ -64,7 +64,7 @@ void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
 // =============================================
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. Stock Monitor", "4. OTA Update", "5. Web Server", "6. Exit"}; 
-const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. Back"}; 
+const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. WiFi Setup", "7. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
 
 extern "C" void action_on_stock_changed_cb(lv_event_t * e);
@@ -382,6 +382,11 @@ void DisplayLogic::updateUI(RemoteState &state) {
 
 void DisplayLogic::setContrast(int level) { ledcWrite(BACKLIGHT_CHANNEL, map(level, 0, 100, 0, 255)); }
 void DisplayLogic::turnOff() { ledcWrite(BACKLIGHT_CHANNEL, 0); tft.writecommand(0x10); /* Sleep in */ }
+void DisplayLogic::turnOn() {
+    tft.writecommand(0x11); // Sleep out
+    delay(120);
+    setContrast(appState.oledBrightness);
+}
 
 static lv_obj_t * file_overlay = NULL;
 

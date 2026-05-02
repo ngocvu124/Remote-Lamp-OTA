@@ -13,6 +13,7 @@ public:
     void setEncoderValue(int val);
     int getEncoderValue();
     bool shouldSleep(uint32_t timeout);
+    void markInteraction();
 
 private:
     int lastEncoderValue = 0;

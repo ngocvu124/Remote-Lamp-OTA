@@ -5,6 +5,12 @@ import json
 import shutil
 import subprocess
 
+
+def _is_enabled(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
 def after_build(source, target, env):
     print("\n\033[92m=== AUTO RENAME, JSON & GITHUB PUSH ===\033[0m")
     
@@ -53,7 +59,13 @@ def after_build(source, target, env):
 
     print("[*] Da cap nhat file versions.json")
 
-    # 4. TỰ ĐỘNG ĐẨY LÊN GITHUB (FORCE PUSH)
+    # 4. TÙY CHỌN: TỰ ĐỘNG ĐẨY LÊN GITHUB (MẶC ĐỊNH TẮT ĐỂ BUILD NHANH/GỌN)
+    auto_push = _is_enabled(env.GetProjectOption("custom_auto_push", "0"), default=False)
+    if not auto_push:
+        print("[*] Bo qua git commit/push (bat bang custom_auto_push = 1 trong platformio.ini neu can)")
+        print("\033[92m=======================================\033[0m\n")
+        return
+
     print("[*] Dang day du lieu len GitHub, vui long cho...")
     try:
         project_dir = env.get("PROJECT_DIR")

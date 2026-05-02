@@ -25,15 +25,25 @@ void StorageLogic::begin() {
         hasLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000)) == pdTRUE);
     }
 
-    // FIX: Retry loop để chống lỗi thẻ SD chậm khởi động sau khi reset
+    // Neu wakeup tu deep sleep, SD card co the can them thoi gian on dinh.
+    // Tang thoi gian cho va so lan retry de xu ly ca truong hop card cham.
+    bool isWakeup = (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED);
+    if (isWakeup) {
+        Serial.println("[STORAGE] Wakeup detected, waiting for SD to stabilize...");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    // FIX: Retry loop de chong loi the SD cham khoi dong sau khi reset
     bool mountSuccess = false;
-    for (int i = 0; i < 3; i++) {
+    int retries = isWakeup ? 5 : 3;
+    int retryDelay = isWakeup ? 300 : 100;
+    for (int i = 0; i < retries; i++) {
         if (sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI))) {
             mountSuccess = true;
             break;
         }
-        Serial.println("[STORAGE] SD Mount retry...");
-        vTaskDelay(pdMS_TO_TICKS(100));
+        Serial.printf("[STORAGE] SD Mount retry %d/%d...\n", i + 1, retries);
+        vTaskDelay(pdMS_TO_TICKS(retryDelay));
     }
 
     if (!mountSuccess) {
@@ -116,11 +126,22 @@ void StorageLogic::saveConfig(RemoteState &state) {
         }
         if (file) {
             StaticJsonDocument<512> doc;
+            char safeBgPath[sizeof(state.bgFilePath)] = {0};
+            size_t bgLen = strnlen(state.bgFilePath, sizeof(state.bgFilePath));
+            if (bgLen > 0 && bgLen < sizeof(state.bgFilePath) && state.bgFilePath[0] == '/') {
+                memcpy(safeBgPath, state.bgFilePath, bgLen);
+                safeBgPath[bgLen] = '\0';
+            } else {
+                strcpy(safeBgPath, "/bg.bin");
+                strncpy(state.bgFilePath, safeBgPath, sizeof(state.bgFilePath) - 1);
+                state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
+            }
+
             doc["sleepTimeout"] = (state.sleepTimeout > 300) ? 60 : state.sleepTimeout;
             doc["oledBrightness"] = state.oledBrightness;
             doc["brightness"] = state.brightness;
             doc["temperature"] = state.temperature;
-            doc["bgFilePath"] = state.bgFilePath;
+            doc["bgFilePath"] = safeBgPath;
             
             String jsonStr;
             serializeJson(doc, jsonStr);
@@ -140,6 +161,7 @@ void StorageLogic::saveConfig(RemoteState &state) {
 bool StorageLogic::loadConfig(RemoteState &state) {
     Serial.println("[STORAGE-LOG] loadConfig() started");
     if (!isReady) return false;
+    bool needsRewriteDefault = false;
 
     bool hasLock = false;
     if (xGuiSemaphore != NULL) {
@@ -191,6 +213,7 @@ bool StorageLogic::loadConfig(RemoteState &state) {
                     return true;
                 } else {
                     Serial.printf("[STORAGE] JSON Parse Error: %s\n", error.c_str());
+                    needsRewriteDefault = true;
                 }
             } else {
                 Serial.println("[STORAGE-LOG] loadConfig: Memory allocation failed!");
@@ -203,7 +226,17 @@ bool StorageLogic::loadConfig(RemoteState &state) {
         Serial.println("[STORAGE-LOG] loadConfig: Failed to open config file. File might not exist yet.");
     }
     if (hasLock) xSemaphoreGiveRecursive(xGuiSemaphore);
-    
+
+    state.sleepTimeout = 60;
+    state.oledBrightness = 50;
+    state.brightness = 50;
+    state.temperature = 50;
     strcpy(state.bgFilePath, "/bg.bin");
+
+    if (needsRewriteDefault) {
+        Serial.println("[STORAGE] Rewriting default config due to invalid JSON...");
+        saveConfig(state);
+    }
+
     return false;
 }

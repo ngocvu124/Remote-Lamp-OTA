@@ -32,6 +32,10 @@ const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
 #define PIN_BATTERY     14
 #define ROTARY_STEPS    4
 
+// Nut encoder goc cua project: pull-up noi bo, nhan = muc LOW.
+#define ROTARY_BTN_USE_PULLDOWN false
+#define ROTARY_BTN_PRESSED_LEVEL LOW
+
 // --- CẤU HÌNH ĐỌC PIN ---
 #define BAT_CALIBRATION_FACTOR 1.0 
 #define BAT_SAMPLES 20             
@@ -80,7 +84,8 @@ enum MenuLevel {
     MENU_STOCK = 7,
     MENU_OTA = 8,
     MENU_WEB_SERVER = 9,
-    MENU_SELECT_BG = 10 
+    MENU_SELECT_BG = 10,
+    MENU_WIFI_SETUP = 11
 };
 
 struct RemoteState {
