@@ -458,11 +458,6 @@ void AppLogic::enterMenu(int level) {
             xSemaphoreGiveRecursive(xGuiSemaphore);
         }
         encoder.setBoundaries(0, storage.bgFileCount, true); 
-        // Auto-trigger preview of first file immediately on entry
-        if (storage.bgFileCount > 0) {
-            pendingImageLoad = true;
-            lastScrollTime = millis() - 350; // fires after ~50ms
-        }
     } 
     else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) {
         encoder.setBoundaries(0, 1000, false); 
