@@ -189,17 +189,25 @@ void AppLogic::handleEvents() {
             else {
                 appState.menuIndex = encoder.getEncoderValue(); 
 
-                if (isViewingImage && appState.currentMenu == MENU_SELECT_BG) {
-                    if (appState.menuIndex == storage.bgFileCount) {
-                        pendingImageLoad = false;
-                        isViewingImage = false; 
-                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
-                            display.closeImagePreview();
-                                    xSemaphoreGiveRecursive(xGuiSemaphore);
+                if (appState.currentMenu == MENU_SELECT_BG) {
+                    if (isViewingImage) {
+                        if (appState.menuIndex == storage.bgFileCount) {
+                            pendingImageLoad = false;
+                            isViewingImage = false; 
+                                    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                                display.closeImagePreview();
+                                        xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                        } else {
+                            pendingImageLoad = true;
+                            lastScrollTime = millis();
                         }
                     } else {
-                        pendingImageLoad = true;
-                        lastScrollTime = millis();
+                        // Auto-preview on scroll even before first click
+                        if (appState.menuIndex < storage.bgFileCount) {
+                            pendingImageLoad = true;
+                            lastScrollTime = millis();
+                        }
                     }
                 }
             }
@@ -300,56 +308,28 @@ void AppLogic::handleEvents() {
                         requestConfigSave(true); enterMenu(MENU_CONTROL); break;
                     case MENU_SELECT_BG:
                         if (appState.menuIndex == storage.bgFileCount) {
-                            if (isViewingImage) {
-                                isViewingImage = false;
-                                pendingImageLoad = false;
-                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
-                                    display.closeImagePreview(); xSemaphoreGiveRecursive(xGuiSemaphore);
-                                }
+                            // "Back" — close preview and exit
+                            pendingImageLoad = false;
+                            isViewingImage = false;
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
+                                display.closeImagePreview(); xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             enterMenu(MENU_CONTROL);
                         } else {
+                            // Apply selected BG immediately (preview already visible via auto-scroll)
                             char fullPath[64];
                             snprintf(fullPath, sizeof(fullPath), "/background/%s", storage.bgFileNames[appState.menuIndex]);
-                            if (isViewingImage) {
-                                pendingImageLoad = false; 
-                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath) - 1);
-                                appState.bgFilePath[sizeof(appState.bgFilePath) - 1] = '\0';
-                                requestConfigSave(true); 
-                                Serial.printf("[APP] Applied new BG: %s\n", fullPath);
-                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    display.closeImagePreview();
-                                    display.loadBackgroundFromSD();
-                                    xSemaphoreGiveRecursive(xGuiSemaphore);
-                                }
-                                isViewingImage = false; exitMenu(); 
-                            } else {
-                                strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath) - 1);
-                                appState.bgFilePath[sizeof(appState.bgFilePath) - 1] = '\0';
-                                Serial.printf("[APP] First click on BG: %s, showing preview.\n", fullPath);
-                                if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-                                    digitalWrite(SCR_CS_PIN, HIGH);
-                                    FsFile file = sd_bg.open(fullPath, O_RDONLY); 
-                                    if (!file) {
-                                        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
-                                        file = sd_bg.open(fullPath, O_RDONLY);
-                                    }
-                                    if (file) {
-                                        if (display.showImagePreview(file)) {
-                                            isViewingImage = true;
-                                            Serial.println("[APP] Preview SUCCESS!");
-                                        } else {
-                                            Serial.println("[APP] Preview FAILED: showImagePreview returned false.");
-                                        }
-                                        file.close();
-                                    } else {
-                                        Serial.printf("[APP] SD Error: Could not open %s\n", fullPath);
-                                    }
-                                    xSemaphoreGiveRecursive(xGuiSemaphore);
-                                } else {
-                                    Serial.println("[APP] Error: GuiSemaphore timeout in preview!");
-                                }
+                            pendingImageLoad = false;
+                            strncpy(appState.bgFilePath, fullPath, sizeof(appState.bgFilePath) - 1);
+                            appState.bgFilePath[sizeof(appState.bgFilePath) - 1] = '\0';
+                            requestConfigSave(true);
+                            Serial.printf("[APP] Applied BG: %s\n", fullPath);
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
+                                display.closeImagePreview();
+                                display.loadBackgroundFromSD();
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
+                            isViewingImage = false; exitMenu();
                         }
                         break;
                     case MENU_OTA:
@@ -387,7 +367,9 @@ void AppLogic::handleEvents() {
                 file = sd_bg.open(fullPath, O_RDONLY);
             }
             if (file) {
-                display.showImagePreview(file);
+                if (display.showImagePreview(file)) {
+                    isViewingImage = true;
+                }
                 file.close();
             } else {
                 Serial.printf("[APP] SD Error on scroll: Could not open %s\n", fullPath);
@@ -476,6 +458,11 @@ void AppLogic::enterMenu(int level) {
             xSemaphoreGiveRecursive(xGuiSemaphore);
         }
         encoder.setBoundaries(0, storage.bgFileCount, true); 
+        // Auto-trigger preview of first file immediately on entry
+        if (storage.bgFileCount > 0) {
+            pendingImageLoad = true;
+            lastScrollTime = millis() - 350; // fires after ~50ms
+        }
     } 
     else if (level == MENU_SET_SLEEP || level == MENU_SET_BACKLIGHT) {
         encoder.setBoundaries(0, 1000, false); 
