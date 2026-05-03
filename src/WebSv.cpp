@@ -229,17 +229,27 @@ static void webTask(void* pvParameters) {
         });
 
         server->on("/list", HTTP_GET, [server]() {
-            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
-                String path = server->hasArg("dir") ? server->arg("dir") : "/";
-                String json = "[";
-                json.reserve(2048); // Tối ưu: Cấp phát trước bộ nhớ để chống phân mảnh Heap
+            String path = server->hasArg("dir") ? server->arg("dir") : "/";
+            String json = "[]";
+            bool listed = false;
+
+            for (int attempt = 0; attempt < 3 && !listed; ++attempt) {
+                if (!xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1500))) {
+                    Serial.println("[WEB] /list: GUI semaphore busy, retry...");
+                    vTaskDelay(pdMS_TO_TICKS(40));
+                    continue;
+                }
+
                 digitalWrite(SCR_CS_PIN, HIGH);
                 FsFile dir = sd_bg.open(path.c_str(), O_RDONLY);
                 if (!dir) {
                     sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
                     dir = sd_bg.open(path.c_str(), O_RDONLY);
                 }
+
                 if (dir && dir.isDirectory()) {
+                    json = "[";
+                    json.reserve(2048); // Tối ưu: Cấp phát trước bộ nhớ để chống phân mảnh Heap
                     FsFile file;
                     bool first = true;
                     dir.rewindDirectory();
@@ -256,12 +266,21 @@ static void webTask(void* pvParameters) {
                         file.close();
                     }
                     dir.close();
+                    json += "]";
+                    listed = true;
+                } else {
+                    Serial.printf("[WEB] /list: open dir failed (%s), retry...\n", path.c_str());
+                    if (dir) dir.close();
                 }
-                json += "]";
-                server->send(200, "application/json", json);
+
                 xSemaphoreGiveRecursive(xGuiSemaphore);
+                if (!listed) vTaskDelay(pdMS_TO_TICKS(40));
+            }
+
+            if (listed) {
+                server->send(200, "application/json", json);
             } else {
-                server->send(500, "text/plain", "SD busy");
+                server->send(503, "text/plain", "SD read failed");
             }
         });
 

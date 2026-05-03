@@ -122,10 +122,16 @@
             loadFiles();
         }
 
-        function loadFiles() {
+        function loadFiles(retry = 0) {
             setStatus('Đang quét thư mục...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
             fetch('/list?dir=' + encodeURIComponent(currentDir))
-            .then(r => r.json())
+            .then(async r => {
+                if (!r.ok) {
+                    const msg = await r.text();
+                    throw new Error(msg || ('HTTP ' + r.status));
+                }
+                return r.json();
+            })
             .then(data => {
                 // Ưu tiên hiển thị thư mục trước, file sau
                 data.sort((a, b) => {
@@ -169,6 +175,11 @@
                 setStatus('Sẵn sàng', '#10b981', 'rgba(16, 185, 129, 0.1)');
             })
             .catch(e => {
+                if (retry < 2) {
+                    setStatus('Thẻ nhớ đang bận, thử lại...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
+                    setTimeout(() => loadFiles(retry + 1), 250);
+                    return;
+                }
                 setStatus('Lỗi đọc thẻ nhớ!', '#ef4444', 'rgba(239, 68, 68, 0.1)');
             });
         }
