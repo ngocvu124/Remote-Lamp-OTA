@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.0.7"
-#define FIRMWARE_NAME "Lamp Set actions + dynamic QR sync"
+#define FIRMWARE_VERSION "v1.6.0.8"
+#define FIRMWARE_NAME "Command ACK fallback for Lamp Set"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];
@@ -78,6 +78,9 @@ typedef struct struct_message {
   int brightness;  
   int temperature; 
   char sysCmd;
+    uint16_t requestId;
+    char ackCmd;
+    char ackOk;
     char setupCode[9];
     char qrId[5];
 } struct_message;

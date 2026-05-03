@@ -15,6 +15,10 @@ struct_message incomingData;
 char currentHomeKitSetupCode[9] = HOMEKIT_SETUP_CODE;
 char currentHomeKitQrId[5] = HOMEKIT_QR_ID;
 bool homeKitQrSynced = false;
+volatile uint16_t lastAckRequestId = 0;
+volatile char lastAckCmd = 0;
+volatile char lastAckOk = 0;
+uint16_t nextRequestId = 1;
 
 int currentChannel = WIFI_CHANNEL;
 volatile bool foundNodeA = false; // Thêm volatile để chống lỗi tối ưu hóa khi dùng đa luồng
@@ -46,6 +50,11 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
         currentHomeKitQrId[sizeof(currentHomeKitQrId) - 1] = '\0';
         homeKitQrSynced = true;
         Serial.printf("[ESP-NOW] Synced HomeKit setup info: code=%s qr=%s\n", currentHomeKitSetupCode, currentHomeKitQrId);
+    } else if (incomingData.mode == 3 && incomingData.sysCmd == 'A') {
+        lastAckRequestId = incomingData.requestId;
+        lastAckCmd = incomingData.ackCmd;
+        lastAckOk = incomingData.ackOk;
+        Serial.printf("[ESP-NOW] ACK received req=%u cmd=%c ok=%d\n", incomingData.requestId, incomingData.ackCmd, incomingData.ackOk);
     }
 }
 
@@ -93,6 +102,13 @@ void EspNowLogic::sendInternal(struct_message msg) {
     myData.brightness = msg.brightness;
     myData.temperature = msg.temperature;
     myData.sysCmd = msg.sysCmd;
+    myData.requestId = msg.requestId;
+    myData.ackCmd = msg.ackCmd;
+    myData.ackOk = msg.ackOk;
+    strncpy(myData.setupCode, msg.setupCode, sizeof(myData.setupCode) - 1);
+    myData.setupCode[sizeof(myData.setupCode) - 1] = '\0';
+    strncpy(myData.qrId, msg.qrId, sizeof(myData.qrId) - 1);
+    myData.qrId[sizeof(myData.qrId) - 1] = '\0';
 
     // Luôn restore về currentChannel trước khi gửi
     // (sau scan thất bại, WiFi có thể bị kẹt ở channel khác)
@@ -123,4 +139,38 @@ void EspNowLogic::sendInternal(struct_message msg) {
 
     // Scan thất bại: restore lại currentChannel để lần sau không kẹt trên ch13
     esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
+}
+
+bool EspNowLogic::sendCommandWithAck(char sysCmd, uint8_t maxRetries, uint16_t ackTimeoutMs) {
+    struct_message cmd = {};
+    cmd.mode = 1;
+    cmd.brightness = appState.brightness;
+    cmd.temperature = appState.temperature;
+    cmd.sysCmd = sysCmd;
+    cmd.requestId = nextRequestId++;
+
+    // Restart/Factory reset: fire-and-forget (khong fallback)
+    if (sysCmd == 'R' || sysCmd == 'F') {
+        sendInternal(cmd);
+        return true;
+    }
+
+    for (uint8_t attempt = 0; attempt <= maxRetries; ++attempt) {
+        lastAckRequestId = 0;
+        lastAckCmd = 0;
+        lastAckOk = 0;
+
+        sendInternal(cmd);
+
+        const uint32_t start = millis();
+        while (millis() - start < ackTimeoutMs) {
+            if (lastAckRequestId == cmd.requestId && lastAckCmd == sysCmd) {
+                return lastAckOk == 1;
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        Serial.printf("[ESP-NOW] ACK timeout req=%u cmd=%c retry=%u/%u\n", cmd.requestId, sysCmd, attempt + 1, maxRetries + 1);
+    }
+
+    return false;
 }

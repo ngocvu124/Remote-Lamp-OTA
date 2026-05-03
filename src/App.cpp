@@ -18,6 +18,7 @@ TaskHandle_t otaTaskHandle = NULL;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern QueueHandle_t xEncoderQueue;
 extern SdFs sd_bg; 
+extern bool homeKitQrSynced;
 
 static int originalSleepTimeout = 60; 
 static bool isViewingFile = false; 
@@ -279,36 +280,37 @@ void AppLogic::handleEvents() {
                         break;
                     case MENU_LAMP:
                         if (appState.menuIndex == 0) {
-                            espNow.send(0, appState.brightness, appState.temperature, 'R');
+                            espNow.sendCommandWithAck('R', 0, 0);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent("LAMP", "Restart command sent.");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
                         } else if (appState.menuIndex == 1) {
-                            espNow.send(0, appState.brightness, appState.temperature, 'U');
+                            bool ok = espNow.sendCommandWithAck('U', 2, 350);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showFileContent("LAMP", "Unpair command sent.");
+                                display.showFileContent("LAMP", ok ? "Unpair command ACK." : "Unpair ACK timeout.");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
                         } else if (appState.menuIndex == 2) {
-                            espNow.send(0, appState.brightness, appState.temperature, 'X');
+                            bool ok = espNow.sendCommandWithAck('X', 2, 350);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showFileContent("LAMP", "Delete WiFi command sent.");
+                                display.showFileContent("LAMP", ok ? "Delete WiFi ACK." : "Delete WiFi ACK timeout.");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
                         } else if (appState.menuIndex == 3) {
-                            espNow.send(0, appState.brightness, appState.temperature, 'F');
+                            espNow.sendCommandWithAck('F', 0, 0);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent("LAMP", "Factory reset command sent.");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
                         } else if (appState.menuIndex == 4) {
-                            espNow.send(1, 0, 0, 'Q');
-                            vTaskDelay(pdMS_TO_TICKS(80));
+                            homeKitQrSynced = false;
+                            espNow.sendCommandWithAck('Q', 2, 350);
+                            vTaskDelay(pdMS_TO_TICKS(120));
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showHomeKitQr();
                                 xSemaphoreGiveRecursive(xGuiSemaphore);

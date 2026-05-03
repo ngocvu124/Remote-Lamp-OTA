@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.0.8 (Command ACK fallback for Lamp Set)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.8.bin"
+  },
+  {
     "name": "v1.6.0.7 (Lamp Set actions + dynamic QR sync)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.7.bin"
   },
