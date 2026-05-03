@@ -32,7 +32,11 @@ bool OtaLogic::fetchVersions() {
     client.setInsecure();
     HTTPClient http;
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    http.begin(client, VERSIONS_URL);
+    String versionsUrl = String(VERSIONS_URL) + "?ts=" + String(millis());
+    http.begin(client, versionsUrl);
+    http.addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    http.addHeader("Pragma", "no-cache");
+    http.addHeader("Expires", "0");
     
     int httpCode = http.GET();
     if (httpCode == HTTP_CODE_OK) {
@@ -42,9 +46,16 @@ bool OtaLogic::fetchVersions() {
             JsonArray arr = doc.as<JsonArray>();
             // Quét tối đa 10 phiên bản mới nhất
             for (int i = 0; i < arr.size() && i < 10; i++) {
-                strncpy(versions[i].name, arr[i]["name"] | "Unknown", 31);
-                strncpy(versions[i].url, arr[i]["url"] | "", 127);
+                const char *name = arr[i]["name"] | "Unknown";
+                const char *url = arr[i]["url"] | "";
+                strncpy(versions[i].name, name, sizeof(versions[i].name) - 1);
+                versions[i].name[sizeof(versions[i].name) - 1] = '\0';
+                strncpy(versions[i].url, url, sizeof(versions[i].url) - 1);
+                versions[i].url[sizeof(versions[i].url) - 1] = '\0';
                 versionCount++;
+            }
+            if (versionCount > 0) {
+                Serial.printf("[OTA] Latest from JSON: %s\n", versions[0].name);
             }
             http.end();
             return true;
