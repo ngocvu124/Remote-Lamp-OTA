@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.2.2"
-#define FIRMWARE_NAME "Auto-preview BG on scroll/entry"
+#define FIRMWARE_VERSION "v1.6.2.3"
+#define FIRMWARE_NAME "BG list then scroll-preview"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];
