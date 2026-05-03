@@ -16,6 +16,7 @@ public:
     void freePSRAMBuffer(char* buffer);
     bool saveConfig(RemoteState &state);
     bool loadConfig(RemoteState &state);
+    void safeSync(RemoteState &state);
 
     char fileNames[15][32]; 
     int fileCount = 0;

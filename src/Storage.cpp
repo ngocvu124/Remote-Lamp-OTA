@@ -1,5 +1,7 @@
 #include "Storage.h"
 #include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
@@ -9,6 +11,41 @@ StorageLogic storage;
 extern SdFs sd_bg; 
 extern SemaphoreHandle_t xGuiSemaphore;
 extern TFT_eSPI tft;
+
+// Flush pending config to NVS+SD then sync SD write buffer before power-off or reset.
+void StorageLogic::safeSync(RemoteState &state) {
+    Serial.println("[STORAGE] safeSync: flushing config to NVS...");
+    // Always save to NVS (fast, no SPI needed)
+    Preferences prefs;
+    if (prefs.begin("rlamp", false)) {
+        const String safeBgPath = (state.bgFilePath[0] == '/') ? state.bgFilePath : "/bg.bin";
+        prefs.putUInt("cfgv", 1);
+        prefs.putInt("sleep", state.sleepTimeout);
+        prefs.putInt("oled", state.oledBrightness);
+        prefs.putInt("bri", state.brightness);
+        prefs.putInt("tmp", state.temperature);
+        prefs.putString("bg", safeBgPath.c_str());
+        prefs.end();
+        Serial.println("[STORAGE] safeSync: NVS saved.");
+    }
+    // Sync SD write buffer (close open handles, flush FAT) if card is ready
+    if (isReady) {
+        bool hasLock = false;
+        if (xGuiSemaphore != NULL) {
+            hasLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(300)) == pdTRUE);
+        }
+        if (hasLock) {
+            digitalWrite(SCR_CS_PIN, HIGH);
+            if (sd_bg.card()) {
+                sd_bg.card()->syncDevice();
+            }
+            Serial.println("[STORAGE] safeSync: SD synced.");
+            xSemaphoreGiveRecursive(xGuiSemaphore);
+        } else {
+            Serial.println("[STORAGE] safeSync: could not lock SPI for SD sync (skip).");
+        }
+    }
+}
 
 static bool loadConfigFromNvs(RemoteState &state) {
     Preferences prefs;

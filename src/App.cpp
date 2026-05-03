@@ -241,6 +241,7 @@ void AppLogic::handleEvents() {
                                 display.showFileContent("WIFI CLEARED", "WiFi deleted! Rebooting...");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
+                            storage.safeSync(appState);
                             vTaskDelay(pdMS_TO_TICKS(2000)); ESP.restart(); 
                         }
                         else if (appState.menuIndex == 3) enterMenu(MENU_SELECT_BG); 

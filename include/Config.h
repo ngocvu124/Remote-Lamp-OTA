@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.2.0"
-#define FIRMWARE_NAME "Lean Remote (Stock Removed)"
+#define FIRMWARE_VERSION "v1.6.2.1"
+#define FIRMWARE_NAME "SD safe-sync before sleep/reset"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];

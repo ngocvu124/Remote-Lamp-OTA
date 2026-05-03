@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.2.1 (SD safe-sync before sleep/reset)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.1.bin"
+  },
+  {
     "name": "v1.6.2.0 (Lean Remote (Stock Removed))",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.0.bin"
   },

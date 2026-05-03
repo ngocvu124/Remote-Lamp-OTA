@@ -46,6 +46,10 @@ void SystemLogic::goToSleep() {
     esp_wifi_stop();
     esp_wifi_deinit();
 
+    // Flush config va sync SD truoc khi tat nguon de tranh mat du lieu / corrupt FAT.
+    storage.safeSync(appState);
+    vTaskDelay(pdMS_TO_TICKS(50));
+
     // KHONG goi sd_bg.end()/SPI.end() khi he thong con da task dang chay.
     // Vi viec teardown bus giua luc GUI/ISR dang su dung de gay WDT va stack canary.
     // Chi ep cac chan SPI ve idle an toan roi vao deep sleep ngay.
