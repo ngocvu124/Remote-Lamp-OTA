@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.0.8"
-#define FIRMWARE_NAME "Command ACK fallback for Lamp Set"
+#define FIRMWARE_VERSION "v1.6.0.9"
+#define FIRMWARE_NAME "Lamp Set: Turn On AP"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];

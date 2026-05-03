@@ -294,9 +294,9 @@ void AppLogic::handleEvents() {
                             }
                             isViewingFile = true;
                         } else if (appState.menuIndex == 2) {
-                            bool ok = espNow.sendCommandWithAck('X', 2, 350);
+                            bool ok = espNow.sendCommandWithAck('A', 2, 350);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showFileContent("LAMP", ok ? "Delete WiFi ACK." : "Delete WiFi ACK timeout.");
+                                display.showFileContent("LAMP", ok ? "Turn On AP ACK." : "Turn On AP ACK timeout.");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
