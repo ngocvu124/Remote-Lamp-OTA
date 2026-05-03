@@ -20,6 +20,26 @@ extern SdFs sd_bg;
 
 static String g_wifiOptions = ""; // Pre-scanned options truyền từ runWiFiPortal vào webTask
 
+static void logSdDiag(const char* tag, const char* path, int attempt) {
+    uint8_t errCode = 0xFF;
+    uint8_t errData = 0xFF;
+    if (sd_bg.card()) {
+        errCode = sd_bg.card()->errorCode();
+        errData = sd_bg.card()->errorData();
+    }
+    Serial.printf(
+        "[WEB][SD] %s path=%s attempt=%d storageReady=%d card=%d err=0x%02X data=0x%02X heap=%lu\n",
+        tag,
+        path ? path : "-",
+        attempt,
+        storage.isReady ? 1 : 0,
+        sd_bg.card() ? 1 : 0,
+        errCode,
+        errData,
+        (unsigned long)ESP.getFreeHeap()
+    );
+}
+
 
 // --- HÀM XÓA ĐỆ QUY CHỐNG LẶP VÔ HẠN VÀ TRÀN STACK ---
 static bool deleteRecursive(const String& path) {
@@ -232,10 +252,13 @@ static void webTask(void* pvParameters) {
             String path = server->hasArg("dir") ? server->arg("dir") : "/";
             String json = "[]";
             bool listed = false;
+            uint32_t startMs = millis();
+
+            Serial.printf("[WEB] /list request dir=%s\n", path.c_str());
 
             for (int attempt = 0; attempt < 3 && !listed; ++attempt) {
                 if (!xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1500))) {
-                    Serial.println("[WEB] /list: GUI semaphore busy, retry...");
+                    logSdDiag("/list semaphore busy", path.c_str(), attempt + 1);
                     vTaskDelay(pdMS_TO_TICKS(40));
                     continue;
                 }
@@ -243,7 +266,9 @@ static void webTask(void* pvParameters) {
                 digitalWrite(SCR_CS_PIN, HIGH);
                 FsFile dir = sd_bg.open(path.c_str(), O_RDONLY);
                 if (!dir) {
-                    sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                    logSdDiag("/list open failed before remount", path.c_str(), attempt + 1);
+                    const bool remountOk = sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+                    Serial.printf("[WEB][SD] /list remount result=%d\n", remountOk ? 1 : 0);
                     dir = sd_bg.open(path.c_str(), O_RDONLY);
                 }
 
@@ -252,6 +277,7 @@ static void webTask(void* pvParameters) {
                     json.reserve(2048); // Tối ưu: Cấp phát trước bộ nhớ để chống phân mảnh Heap
                     FsFile file;
                     bool first = true;
+                    uint16_t itemCount = 0;
                     dir.rewindDirectory();
                     while (file.openNext(&dir, O_RDONLY)) {
                         char name[64];
@@ -262,14 +288,19 @@ static void webTask(void* pvParameters) {
                             json += "\"isDir\":" + String(file.isDirectory() ? "true" : "false") + ",";
                             json += "\"size\":" + String(file.size()) + "}";
                             first = false;
+                            itemCount++;
                         }
                         file.close();
                     }
                     dir.close();
                     json += "]";
                     listed = true;
+                    Serial.printf("[WEB] /list ok dir=%s items=%u took=%lums\n",
+                                  path.c_str(),
+                                  (unsigned)itemCount,
+                                  (unsigned long)(millis() - startMs));
                 } else {
-                    Serial.printf("[WEB] /list: open dir failed (%s), retry...\n", path.c_str());
+                    logSdDiag("/list open dir failed", path.c_str(), attempt + 1);
                     if (dir) dir.close();
                 }
 
@@ -280,6 +311,7 @@ static void webTask(void* pvParameters) {
             if (listed) {
                 server->send(200, "application/json", json);
             } else {
+                logSdDiag("/list failed after retries", path.c_str(), 3);
                 server->send(503, "text/plain", "SD read failed");
             }
         });

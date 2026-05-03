@@ -180,7 +180,7 @@
                     setTimeout(() => loadFiles(retry + 1), 250);
                     return;
                 }
-                setStatus('Lỗi đọc thẻ nhớ!', '#ef4444', 'rgba(239, 68, 68, 0.1)');
+                setStatus('Lỗi đọc thẻ nhớ: ' + (e.message || 'unknown'), '#ef4444', 'rgba(239, 68, 68, 0.1)');
             });
         }
 

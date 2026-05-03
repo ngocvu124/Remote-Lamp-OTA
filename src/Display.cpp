@@ -75,7 +75,7 @@ void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
 
 // =============================================
 
-const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. OTA Update", "4. Web Server", "5. Exit"}; 
+const char* mainMenuItems[] = {"1. Control Setting", "2. Lamp Setting", "3. OTA Update", "4. Web Server", "5. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. WiFi Setup", "7. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Turn On AP", "4. Reset", "5. HomeKit QR", "6. Back"};
 
