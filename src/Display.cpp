@@ -691,6 +691,7 @@ bool DisplayLogic::showImagePreview(FsFile& file) {
         }
         lv_img_set_src(preview_img_obj, &preview_img_dsc);
         lv_scr_load(scr_image_preview);
+        lv_refr_now(NULL); // force flush to TFT immediately while holding semaphore
         Serial.println("[DISPLAY] Preview loaded successfully");
         return true;
     }

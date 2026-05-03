@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.2.4 (Fix preview: lv_refr_now force flush)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.4.bin"
+  },
+  {
     "name": "v1.6.2.3 (BG list then scroll-preview)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.3.bin"
   },
