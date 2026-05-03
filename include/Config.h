@@ -7,15 +7,19 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.0.4"
-#define FIRMWARE_NAME "Fix save storm and SD read retry"
+#define FIRMWARE_VERSION "v1.6.0.7"
+#define FIRMWARE_NAME "Lamp Set actions + dynamic QR sync"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];
 
 // --- CẤU HÌNH KẾT NỐI ESP-NOW ---
-#define WIFI_CHANNEL 6 
+#define WIFI_CHANNEL 11
 const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
+
+#define HOMEKIT_SETUP_CODE "46637726"
+#define HOMEKIT_QR_ID "HSPN"
+#define HOMEKIT_CATEGORY 5
 
 // --- CẤU HÌNH PINOUT (ESP32-S3) ---
 #define SPI_SCK_PIN     4
@@ -35,6 +39,10 @@ const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
 // Nut encoder goc cua project: pull-up noi bo, nhan = muc LOW.
 #define ROTARY_BTN_USE_PULLDOWN false
 #define ROTARY_BTN_PRESSED_LEVEL LOW
+
+// Chan wake phu de test loi phan cung nut/chân chinh.
+// Mac dinh GPIO12 (RTC GPIO tren ESP32-S3). Noi nut tam thoi: GPIO12 <-> GND.
+#define WAKE_AUX_PIN 12
 
 // --- CẤU HÌNH ĐỌC PIN ---
 #define BAT_CALIBRATION_FACTOR 1.0 
@@ -70,6 +78,8 @@ typedef struct struct_message {
   int brightness;  
   int temperature; 
   char sysCmd;
+    char setupCode[9];
+    char qrId[5];
 } struct_message;
 
 // CÚ CHỐT: Danh sách các Menu (Đã thay USB_MODE thành ABOUT)
@@ -103,5 +113,9 @@ struct RemoteState {
     int batteryLevel = 100;
     char bgFilePath[64] = "/bg.bin";
 };
+
+extern char currentHomeKitSetupCode[9];
+extern char currentHomeKitQrId[5];
+extern bool homeKitQrSynced;
 
 #endif

@@ -33,9 +33,13 @@ static bool configSavePending = false;
 static void requestConfigSave(bool forceNow = false) {
     const uint32_t now = millis();
     if (forceNow || now - lastConfigSaveMs >= 1200) {
-        storage.saveConfig(appState);
-        lastConfigSaveMs = now;
-        configSavePending = false;
+        if (storage.saveConfig(appState)) {
+            lastConfigSaveMs = now;
+            configSavePending = false;
+        } else {
+            // Save fail (thuong do SPI lock/SD busy) -> giu pending de retry.
+            configSavePending = true;
+        }
     } else {
         configSavePending = true;
     }
@@ -158,6 +162,7 @@ void AppLogic::handleEvents() {
                     display.showFileContent(NULL, NULL); 
                     display.closeProgressPopup(); 
                     display.closeImagePreview(); 
+                    display.closeHomeKitQr();
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
@@ -237,6 +242,7 @@ void AppLogic::handleEvents() {
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); 
                     display.closeImagePreview();
+                    display.closeHomeKitQr();
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
@@ -270,6 +276,47 @@ void AppLogic::handleEvents() {
                         else if (appState.menuIndex == 4) enterMenu(MENU_ABOUT);
                         else if (appState.menuIndex == 5) enterMenu(MENU_WIFI_SETUP);
                         else enterMenu(MENU_MAIN);
+                        break;
+                    case MENU_LAMP:
+                        if (appState.menuIndex == 0) {
+                            espNow.send(0, appState.brightness, appState.temperature, 'R');
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showFileContent("LAMP", "Restart command sent.");
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            isViewingFile = true;
+                        } else if (appState.menuIndex == 1) {
+                            espNow.send(0, appState.brightness, appState.temperature, 'U');
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showFileContent("LAMP", "Unpair command sent.");
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            isViewingFile = true;
+                        } else if (appState.menuIndex == 2) {
+                            espNow.send(0, appState.brightness, appState.temperature, 'X');
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showFileContent("LAMP", "Delete WiFi command sent.");
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            isViewingFile = true;
+                        } else if (appState.menuIndex == 3) {
+                            espNow.send(0, appState.brightness, appState.temperature, 'F');
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showFileContent("LAMP", "Factory reset command sent.");
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            isViewingFile = true;
+                        } else if (appState.menuIndex == 4) {
+                            espNow.send(1, 0, 0, 'Q');
+                            vTaskDelay(pdMS_TO_TICKS(80));
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showHomeKitQr();
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            isViewingFile = true;
+                        } else if (appState.menuIndex == 5) {
+                            enterMenu(MENU_MAIN);
+                        }
                         break;
                     case MENU_SET_SLEEP:         
                     case MENU_SET_BACKLIGHT:
@@ -414,6 +461,9 @@ void AppLogic::enterMenu(int level) {
     } 
     else if (level == MENU_CONTROL) {
         encoder.setBoundaries(0, 6, true); 
+    }
+    else if (level == MENU_LAMP) {
+        encoder.setBoundaries(0, 5, true);
     } 
     else if (level == MENU_ABOUT) { 
         char* about_text = (char*)heap_caps_malloc(1024, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);

@@ -1,5 +1,17 @@
 [
   {
+    "name": "v1.6.0.7 (Lamp Set actions + dynamic QR sync)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.7.bin"
+  },
+  {
+    "name": "v1.6.0.6 (HomeKit QR on remote)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.6.bin"
+  },
+  {
+    "name": "v1.6.0.5 (Dual wake pins for deep sleep)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.5.bin"
+  },
+  {
     "name": "v1.6.0.4 (Fix save storm and SD read retry)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.4.bin"
   },

@@ -12,6 +12,9 @@ EspNowLogic espNow;
 esp_now_peer_info_t peerInfo;
 struct_message myData;
 struct_message incomingData;
+char currentHomeKitSetupCode[9] = HOMEKIT_SETUP_CODE;
+char currentHomeKitQrId[5] = HOMEKIT_QR_ID;
+bool homeKitQrSynced = false;
 
 int currentChannel = WIFI_CHANNEL;
 volatile bool foundNodeA = false; // Thêm volatile để chống lỗi tối ưu hóa khi dùng đa luồng
@@ -36,6 +39,13 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incoming, int len) {
 
         // Chỉ phất cờ, KHÔNG CHẠM VÀO MÀN HÌNH Ở ĐÂY
         espnow_needs_update = true; 
+    } else if (incomingData.mode == 2 && incomingData.sysCmd == 'Q') {
+        strncpy(currentHomeKitSetupCode, incomingData.setupCode, sizeof(currentHomeKitSetupCode) - 1);
+        currentHomeKitSetupCode[sizeof(currentHomeKitSetupCode) - 1] = '\0';
+        strncpy(currentHomeKitQrId, incomingData.qrId, sizeof(currentHomeKitQrId) - 1);
+        currentHomeKitQrId[sizeof(currentHomeKitQrId) - 1] = '\0';
+        homeKitQrSynced = true;
+        Serial.printf("[ESP-NOW] Synced HomeKit setup info: code=%s qr=%s\n", currentHomeKitSetupCode, currentHomeKitQrId);
     }
 }
 
@@ -65,7 +75,7 @@ void EspNowLogic::begin() {
 
 // ===== HÀM GỬI TÍN HIỆU (GIAO CHO QUEUE) =====
 void EspNowLogic::send(int mode, int bri, int temp, char sysCmd) {
-    struct_message msg;
+    struct_message msg = {};
     msg.mode = mode;
     msg.brightness = bri;
     msg.temperature = temp;
@@ -84,46 +94,33 @@ void EspNowLogic::sendInternal(struct_message msg) {
     myData.temperature = msg.temperature;
     myData.sysCmd = msg.sysCmd;
 
-    if (esp_now_send(BROADCAST_ADDRESS,
-                     (uint8_t *)&myData,
-                     sizeof(myData)) == ESP_OK) {
-        return;
-    }
+    // Luôn restore về currentChannel trước khi gửi
+    // (sau scan thất bại, WiFi có thể bị kẹt ở channel khác)
+    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
 
-    if (currentChannel != 1) {
-        esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-        for (int i = 0; i < 2; i++) {
-            esp_now_send(BROADCAST_ADDRESS,
-                         (uint8_t *)&myData,
-                         sizeof(myData));
-            
-            // Đổi delay thành vTaskDelay để tuân thủ luật FreeRTOS
-            vTaskDelay(pdMS_TO_TICKS(10)); 
-            
-            if (foundNodeA) {
-                currentChannel = 1;
-                return;
-            }
-        }
-    }
+    foundNodeA = false;
+    esp_now_send(BROADCAST_ADDRESS, (uint8_t *)&myData, sizeof(myData));
+    vTaskDelay(pdMS_TO_TICKS(25));
 
+    if (foundNodeA) return; // Gửi thành công
+
+    // Gửi thất bại → scan toàn bộ channel 1-13
     static unsigned long lastScan = 0;
-    static uint32_t scanInterval = 2000; // Bắt đầu từ 2s
 
-    if (millis() - lastScan < scanInterval) return;
+    if (millis() - lastScan < 3000) return;
     lastScan = millis();
 
-    for (int ch = 1; ch <= 11; ch++) {
+    for (int ch = 1; ch <= 13; ch++) {
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+        foundNodeA = false;
         esp_now_send(BROADCAST_ADDRESS, (uint8_t *)&myData, sizeof(myData));
-        vTaskDelay(pdMS_TO_TICKS(15));
+        vTaskDelay(pdMS_TO_TICKS(25));
         if (foundNodeA) {
             currentChannel = ch;
-            scanInterval = 2000; // ← Tìm thấy: reset về bình thường
             return;
         }
     }
 
-    // Không tìm thấy: tăng interval lên gấp đôi, tối đa 30 giây
-    scanInterval = min(scanInterval * 2, (uint32_t)30000);
+    // Scan thất bại: restore lại currentChannel để lần sau không kẹt trên ch13
+    esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
 }

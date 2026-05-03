@@ -14,7 +14,7 @@ public:
     void loadBgFiles();
     char* readFileToPSRAM(const char* filename);
     void freePSRAMBuffer(char* buffer);
-    void saveConfig(RemoteState &state);
+    bool saveConfig(RemoteState &state);
     bool loadConfig(RemoteState &state);
 
     char fileNames[15][32]; 

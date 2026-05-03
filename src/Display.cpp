@@ -77,9 +77,33 @@ void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
 
 const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. Stock Monitor", "4. OTA Update", "5. Web Server", "6. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. WiFi Setup", "7. Back"}; 
-const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. Back"};
+const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Del WiFi", "4. Reset", "5. HomeKit QR", "6. Back"};
 
 extern "C" void action_on_stock_changed_cb(lv_event_t * e);
+
+static lv_obj_t *homekit_qr_overlay = NULL;
+static lv_obj_t *homekit_qr_obj = NULL;
+
+static void buildHomeKitQrPayload(char *payload, size_t payloadSize) {
+    if (payloadSize < 21) {
+        if (payloadSize) payload[0] = '\0';
+        return;
+    }
+
+    const char *setupCodeStr = currentHomeKitSetupCode[0] ? currentHomeKitSetupCode : HOMEKIT_SETUP_CODE;
+    const char *qrIdStr = currentHomeKitQrId[0] ? currentHomeKitQrId : HOMEKIT_QR_ID;
+    uint32_t setupCode = atoi(setupCodeStr) & 0x07FFFFFF;
+    constexpr uint8_t homeKitIpProtocol = 2;
+    uint64_t encoded = ((uint64_t)HOMEKIT_CATEGORY << 31) | ((uint64_t)homeKitIpProtocol << 27) | setupCode;
+
+    strcpy(payload, "X-HM://");
+    for (int index = 15; index >= 7; --index) {
+        payload[index] = encoded % 36 + 48;
+        if (payload[index] > '9') payload[index] += 7;
+        encoded /= 36;
+    }
+    snprintf(payload + 16, payloadSize - 16, "%-4.4s", qrIdStr);
+}
 
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
     uint32_t w = (area->x2 - area->x1 + 1);
@@ -164,6 +188,8 @@ void DisplayLogic::begin() {
     disp_drv.ver_res = SCREEN_HEIGHT;
     disp_drv.flush_cb = my_disp_flush;
     disp_drv.draw_buf = &draw_buf;
+    // Force full-screen redraw every frame to avoid partial dirty-area ghosting.
+    disp_drv.full_refresh = 1;
     lv_disp_t * disp = lv_disp_drv_register(&disp_drv);
     if (!disp) {
         Serial.println("\n[FATAL] lv_disp_drv_register FAILED! Memory pool exhausted.");
@@ -187,6 +213,20 @@ void DisplayLogic::begin() {
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
     bootPrint("UI", "Building screens");
     ui_init(); // Dùng ui_init() để nạp đầy đủ Theme và Fonts mặc định
+
+    // Ensure all root screens are fully opaque so old frame data is never visible.
+    if (objects.main) {
+        lv_obj_set_style_bg_color(objects.main, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(objects.main, LV_OPA_COVER, 0);
+    }
+    if (objects.menu) {
+        lv_obj_set_style_bg_color(objects.menu, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(objects.menu, LV_OPA_COVER, 0);
+    }
+    if (objects.stock) {
+        lv_obj_set_style_bg_color(objects.stock, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(objects.stock, LV_OPA_COVER, 0);
+    }
     
     if (objects.stock_roller != NULL) {
         lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -379,10 +419,10 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 6); 
             } 
             else if (state.currentMenu == MENU_CONTROL) {
-                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 6); 
+                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 7); 
             }
             else if (state.currentMenu == MENU_LAMP) {
-                lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 5);
+                lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 6);
             }
             else if (state.currentMenu == MENU_OTA || state.currentMenu == MENU_SELECT_BG) {
                 const char* items[30]; 
@@ -418,11 +458,58 @@ void DisplayLogic::updateUI(RemoteState &state) {
 }
 
 void DisplayLogic::setContrast(int level) { ledcWrite(BACKLIGHT_CHANNEL, map(level, 0, 100, 0, 255)); }
-void DisplayLogic::turnOff() { ledcWrite(BACKLIGHT_CHANNEL, 0); tft.writecommand(0x10); /* Sleep in */ }
+void DisplayLogic::turnOff() {
+    ledcWrite(BACKLIGHT_CHANNEL, 0);
+    // KHONG gui Sleep In (0x10) cho display IC truoc deep sleep.
+    // Neu gui Sleep In, tft.begin() sau wake khong tu gui Sleep Out,
+    // khien IC bo qua lenh ve va man hinh bi "dinh" anh cu.
+}
 void DisplayLogic::turnOn() {
     tft.writecommand(0x11); // Sleep out
     delay(120);
     setContrast(appState.oledBrightness);
+}
+
+void DisplayLogic::showHomeKitQr() {
+    closeHomeKitQr();
+
+    char payload[21] = {0};
+    buildHomeKitQrPayload(payload, sizeof(payload));
+
+    homekit_qr_overlay = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(homekit_qr_overlay, 230, 230);
+    lv_obj_center(homekit_qr_overlay);
+    lv_obj_set_style_radius(homekit_qr_overlay, 12, 0);
+    lv_obj_set_style_bg_color(homekit_qr_overlay, lv_color_hex(0x111111), 0);
+    lv_obj_set_style_bg_opa(homekit_qr_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(homekit_qr_overlay, 0, 0);
+    lv_obj_set_style_pad_all(homekit_qr_overlay, 10, 0);
+
+    lv_obj_t *title = lv_label_create(homekit_qr_overlay);
+    lv_label_set_text(title, "HomeKit Setup QR");
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
+
+    homekit_qr_obj = lv_qrcode_create(homekit_qr_overlay, 140, lv_color_black(), lv_color_white());
+    lv_qrcode_update(homekit_qr_obj, payload, strlen(payload));
+    lv_obj_align(homekit_qr_obj, LV_ALIGN_CENTER, 0, 8);
+
+    const char *setupCodeStr = currentHomeKitSetupCode[0] ? currentHomeKitSetupCode : HOMEKIT_SETUP_CODE;
+    lv_obj_t *code = lv_label_create(homekit_qr_overlay);
+    lv_label_set_text_fmt(code, "Code: %.3s-%.2s-%.3s", setupCodeStr, setupCodeStr + 3, setupCodeStr + 5);
+    lv_obj_align(code, LV_ALIGN_BOTTOM_MID, 0, -18);
+
+    lv_obj_t *hint = lv_label_create(homekit_qr_overlay);
+    lv_label_set_text(hint, homeKitQrSynced ? "Synced from lamp" : "Using fallback code");
+    lv_obj_set_style_text_color(hint, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, 0);
+}
+
+void DisplayLogic::closeHomeKitQr() {
+    if (homekit_qr_overlay) {
+        lv_obj_del(homekit_qr_overlay);
+        homekit_qr_overlay = NULL;
+        homekit_qr_obj = NULL;
+    }
 }
 
 static lv_obj_t * file_overlay = NULL;

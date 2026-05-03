@@ -3,11 +3,74 @@
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
+#include <Preferences.h>
 
 StorageLogic storage;
 extern SdFs sd_bg; 
 extern SemaphoreHandle_t xGuiSemaphore;
 extern TFT_eSPI tft;
+
+static bool loadConfigFromNvs(RemoteState &state) {
+    Preferences prefs;
+    if (!prefs.begin("rlamp", true)) {
+        return false;
+    }
+
+    const uint32_t cfgv = prefs.getUInt("cfgv", 0);
+    if (cfgv == 0) {
+        prefs.end();
+        return false;
+    }
+
+    state.sleepTimeout = prefs.getInt("sleep", 60);
+    if (state.sleepTimeout < 30 || state.sleepTimeout > 300) state.sleepTimeout = 60;
+
+    state.oledBrightness = prefs.getInt("oled", 50);
+    if (state.oledBrightness < 0 || state.oledBrightness > 100) state.oledBrightness = 50;
+
+    state.brightness = prefs.getInt("bri", 50);
+    if (state.brightness < 0 || state.brightness > 100) state.brightness = 50;
+
+    state.temperature = prefs.getInt("tmp", 50);
+    if (state.temperature < 0 || state.temperature > 100) state.temperature = 50;
+
+    String bg = prefs.getString("bg", "/bg.bin");
+    prefs.end();
+
+    if (bg.length() == 0 || bg[0] != '/') {
+        strncpy(state.bgFilePath, "/bg.bin", sizeof(state.bgFilePath) - 1);
+        state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
+    } else {
+        strncpy(state.bgFilePath, bg.c_str(), sizeof(state.bgFilePath) - 1);
+        state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
+    }
+
+    Serial.printf("[STORAGE-LOG] Loaded config from NVS: sleep=%d oled=%d bri=%d tmp=%d bg=%s\n",
+                  state.sleepTimeout, state.oledBrightness, state.brightness, state.temperature, state.bgFilePath);
+    return true;
+}
+
+static bool saveConfigToNvs(const RemoteState &state, const char *safeBgPath) {
+    Preferences prefs;
+    if (!prefs.begin("rlamp", false)) {
+        Serial.println("[STORAGE-LOG] NVS open failed");
+        return false;
+    }
+
+    bool ok = true;
+    ok &= prefs.putUInt("cfgv", 1) > 0;
+    ok &= prefs.putInt("sleep", state.sleepTimeout) > 0;
+    ok &= prefs.putInt("oled", state.oledBrightness) > 0;
+    ok &= prefs.putInt("bri", state.brightness) > 0;
+    ok &= prefs.putInt("tmp", state.temperature) > 0;
+    ok &= prefs.putString("bg", safeBgPath) > 0;
+    prefs.end();
+
+    if (!ok) {
+        Serial.println("[STORAGE-LOG] NVS write incomplete");
+    }
+    return ok;
+}
 
 void StorageLogic::begin() {
     Serial.println("\n[STORAGE] --- SD CARD INIT ---");
@@ -118,11 +181,26 @@ void StorageLogic::loadBgFiles() {
 }
 
 
-void StorageLogic::saveConfig(RemoteState &state) {
+bool StorageLogic::saveConfig(RemoteState &state) {
     Serial.println("[STORAGE-LOG] saveConfig() started");
-    if (!isReady) return;
+    if (!isReady) return false;
     
     // Phải khóa Bus SPI (thông qua GuiSemaphore) trước khi cho SD Card ghi để tránh đụng độ TFT
+    bool saved = false;
+    char safeBgPath[sizeof(state.bgFilePath)] = {0};
+    size_t bgLen = strnlen(state.bgFilePath, sizeof(state.bgFilePath));
+    if (bgLen > 0 && bgLen < sizeof(state.bgFilePath) && state.bgFilePath[0] == '/') {
+        memcpy(safeBgPath, state.bgFilePath, bgLen);
+        safeBgPath[bgLen] = '\0';
+    } else {
+        strcpy(safeBgPath, "/bg.bin");
+        strncpy(state.bgFilePath, safeBgPath, sizeof(state.bgFilePath) - 1);
+        state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
+    }
+
+    // Save NVS first (primary persistence, independent from SD/SPI contention).
+    const bool nvsSaved = saveConfigToNvs(state, safeBgPath);
+
     if (xGuiSemaphore != NULL && xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
         digitalWrite(SCR_CS_PIN, HIGH);
         // Dùng config.txt thay cho .json để tương thích chuẩn 8.3 của FAT32
@@ -133,17 +211,6 @@ void StorageLogic::saveConfig(RemoteState &state) {
         }
         if (file) {
             StaticJsonDocument<512> doc;
-            char safeBgPath[sizeof(state.bgFilePath)] = {0};
-            size_t bgLen = strnlen(state.bgFilePath, sizeof(state.bgFilePath));
-            if (bgLen > 0 && bgLen < sizeof(state.bgFilePath) && state.bgFilePath[0] == '/') {
-                memcpy(safeBgPath, state.bgFilePath, bgLen);
-                safeBgPath[bgLen] = '\0';
-            } else {
-                strcpy(safeBgPath, "/bg.bin");
-                strncpy(state.bgFilePath, safeBgPath, sizeof(state.bgFilePath) - 1);
-                state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
-            }
-
             doc["sleepTimeout"] = (state.sleepTimeout > 300) ? 60 : state.sleepTimeout;
             doc["oledBrightness"] = state.oledBrightness;
             doc["brightness"] = state.brightness;
@@ -166,6 +233,7 @@ void StorageLogic::saveConfig(RemoteState &state) {
 
             if (wr == jsonStr.length()) {
                 Serial.println("[STORAGE-LOG] Config saved successfully.");
+                saved = true;
             } else {
                 Serial.printf("[STORAGE-LOG] Config write short! expected=%u written=%u\n",
                               (unsigned)jsonStr.length(), (unsigned)wr);
@@ -177,11 +245,20 @@ void StorageLogic::saveConfig(RemoteState &state) {
     } else {
         Serial.println("[STORAGE-LOG] saveConfig: Failed to get SPI lock!");
     }
+
+    // Treat success if either NVS or SD save succeeded.
+    return saved || nvsSaved;
 }
 
 bool StorageLogic::loadConfig(RemoteState &state) {
     Serial.println("[STORAGE-LOG] loadConfig() started");
     if (!isReady) return false;
+
+    // Prefer NVS (more reliable than SD on shared SPI bus).
+    if (loadConfigFromNvs(state)) {
+        return true;
+    }
+
     bool needsRewriteDefault = false;
     bool tryBackup = false;
 

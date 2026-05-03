@@ -21,6 +21,8 @@ public:
     void closeProgressPopup();
     void forceRebuild(); 
     void loadBackgroundFromSD(); 
+    void showHomeKitQr();
+    void closeHomeKitQr();
 
     // BOOT LOG: gọi trước khi LVGL sẵn sàng, dùng tft trực tiếp
     void bootPrint(const char* tag, const char* msg, bool ok = true);
