@@ -31,6 +31,8 @@ static volatile bool forceStockUpdate = false; // Cờ báo hiệu cho luồng s
 static uint32_t lastConfigSaveMs = 0;
 static bool configSavePending = false;
 
+extern volatile bool espnow_needs_update;
+
 static void requestConfigSave(bool forceNow = false) {
     const uint32_t now = millis();
     if (forceNow || now - lastConfigSaveMs >= 1200) {
@@ -150,6 +152,14 @@ void AppLogic::begin() {
 void AppLogic::handleEvents() {
     EncoderEvent event;
     bool ui_needs_update = false;
+
+    if (espnow_needs_update) {
+        espnow_needs_update = false;
+        if (appState.currentMenu == MENU_NONE) {
+            encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
+        }
+        ui_needs_update = true;
+    }
 
     if (xQueueReceive(xEncoderQueue, &event, pdMS_TO_TICKS(10)) == pdPASS) {
         ui_needs_update = true; 

@@ -7,7 +7,7 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.0.9"
+#define FIRMWARE_VERSION "v1.6.1.0"
 #define FIRMWARE_NAME "Lamp Set: Turn On AP"
 
 // --- CẤU HÌNH WIFI

@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.1.0 (Lamp Set: Turn On AP)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.1.0.bin"
+  },
+  {
     "name": "v1.6.0.9 (Lamp Set: Turn On AP)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.9.bin"
   },
