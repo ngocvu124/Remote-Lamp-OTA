@@ -20,6 +20,34 @@ extern SdFs sd_bg;
 
 static String g_wifiOptions = ""; // Pre-scanned options truyền từ runWiFiPortal vào webTask
 
+static String jsonEscape(const char* s) {
+    String out;
+    if (!s) return out;
+    out.reserve(strlen(s) + 8);
+    for (const char* p = s; *p; ++p) {
+        const char c = *p;
+        switch (c) {
+            case '\\': out += "\\\\"; break;
+            case '"':  out += "\\\""; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if ((uint8_t)c < 0x20) {
+                    char buf[7];
+                    snprintf(buf, sizeof(buf), "\\u%04X", (unsigned)c);
+                    out += buf;
+                } else {
+                    out += c;
+                }
+                break;
+        }
+    }
+    return out;
+}
+
 static void logSdDiag(const char* tag, const char* path, int attempt) {
     uint8_t errCode = 0xFF;
     uint8_t errData = 0xFF;
@@ -283,8 +311,9 @@ static void webTask(void* pvParameters) {
                         char name[64];
                         file.getName(name, sizeof(name));
                         if (String(name) != "System Volume Information") {
+                            const String safeName = jsonEscape(name);
                             if (!first) json += ",";
-                            json += "{\"name\":\"" + String(name) + "\",";
+                            json += "{\"name\":\"" + safeName + "\",";
                             json += "\"isDir\":" + String(file.isDirectory() ? "true" : "false") + ",";
                             json += "\"size\":" + String(file.size()) + "}";
                             first = false;

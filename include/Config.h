@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.2.6"
-#define FIRMWARE_NAME "SD web diagnostics logs"
+#define FIRMWARE_VERSION "v1.6.2.7"
+#define FIRMWARE_NAME "Fix web list JSON escape"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];

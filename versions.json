@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.2.7 (Fix web list JSON escape)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.7.bin"
+  },
+  {
     "name": "v1.6.2.6 (SD web diagnostics logs)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.6.bin"
   },
