@@ -512,6 +512,54 @@ void DisplayLogic::closeHomeKitQr() {
     }
 }
 
+// ===== AP WiFi QR =====
+static lv_obj_t *ap_qr_overlay = NULL;
+static lv_obj_t *ap_qr_obj = NULL;
+
+void DisplayLogic::showApWifiQr() {
+    closeApWifiQr();
+
+    char payload[80];
+    snprintf(payload, sizeof(payload), "WIFI:T:WPA;S:%s;P:%s;;", LAMP_AP_SSID, LAMP_AP_PASSWORD);
+
+    ap_qr_overlay = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(ap_qr_overlay, 230, 230);
+    lv_obj_center(ap_qr_overlay);
+    lv_obj_set_style_radius(ap_qr_overlay, 12, 0);
+    lv_obj_set_style_bg_color(ap_qr_overlay, lv_color_hex(0x0a1a2a), 0);
+    lv_obj_set_style_bg_opa(ap_qr_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(ap_qr_overlay, lv_palette_main(LV_PALETTE_CYAN), 0);
+    lv_obj_set_style_border_width(ap_qr_overlay, 2, 0);
+    lv_obj_set_style_pad_all(ap_qr_overlay, 8, 0);
+
+    lv_obj_t *title = lv_label_create(ap_qr_overlay);
+    lv_label_set_text(title, "Connect to Lamp AP");
+    lv_obj_set_style_text_color(title, lv_palette_main(LV_PALETTE_CYAN), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
+
+    ap_qr_obj = lv_qrcode_create(ap_qr_overlay, 140, lv_color_black(), lv_color_white());
+    lv_qrcode_update(ap_qr_obj, payload, strlen(payload));
+    lv_obj_align(ap_qr_obj, LV_ALIGN_CENTER, 0, 5);
+
+    lv_obj_t *ssid_label = lv_label_create(ap_qr_overlay);
+    lv_label_set_text_fmt(ssid_label, "SSID: %s", LAMP_AP_SSID);
+    lv_obj_set_style_text_color(ssid_label, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
+    lv_obj_align(ssid_label, LV_ALIGN_BOTTOM_MID, 0, -16);
+
+    lv_obj_t *hint = lv_label_create(ap_qr_overlay);
+    lv_label_set_text(hint, "Scan to configure WiFi");
+    lv_obj_set_style_text_color(hint, lv_palette_lighten(LV_PALETTE_GREY, 1), 0);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, 0);
+}
+
+void DisplayLogic::closeApWifiQr() {
+    if (ap_qr_overlay) {
+        lv_obj_del(ap_qr_overlay);
+        ap_qr_overlay = NULL;
+        ap_qr_obj = NULL;
+    }
+}
+
 static lv_obj_t * file_overlay = NULL;
 
 void DisplayLogic::showFileContent(const char* title, const char* content) {

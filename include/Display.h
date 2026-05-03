@@ -23,6 +23,8 @@ public:
     void loadBackgroundFromSD(); 
     void showHomeKitQr();
     void closeHomeKitQr();
+    void showApWifiQr();
+    void closeApWifiQr();
 
     // BOOT LOG: gọi trước khi LVGL sẵn sàng, dùng tft trực tiếp
     void bootPrint(const char* tag, const char* msg, bool ok = true);

@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.1.0"
-#define FIRMWARE_NAME "Lamp Set: Turn On AP"
+#define FIRMWARE_VERSION "v1.6.1.1"
+#define FIRMWARE_NAME "AP WiFi QR on Turn On AP"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];
@@ -20,6 +20,9 @@ const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
 #define HOMEKIT_SETUP_CODE "46637726"
 #define HOMEKIT_QR_ID "HSPN"
 #define HOMEKIT_CATEGORY 5
+
+#define LAMP_AP_SSID     "SmartLamp-AP"
+#define LAMP_AP_PASSWORD "smartlamp"
 
 // --- CẤU HÌNH PINOUT (ESP32-S3) ---
 #define SPI_SCK_PIN     4

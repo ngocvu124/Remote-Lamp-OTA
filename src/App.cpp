@@ -174,6 +174,7 @@ void AppLogic::handleEvents() {
                     display.closeProgressPopup(); 
                     display.closeImagePreview(); 
                     display.closeHomeKitQr();
+                        display.closeApWifiQr();
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
@@ -254,6 +255,7 @@ void AppLogic::handleEvents() {
                     display.showFileContent(NULL, NULL); 
                     display.closeImagePreview();
                     display.closeHomeKitQr();
+                    display.closeApWifiQr();
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
@@ -306,10 +308,14 @@ void AppLogic::handleEvents() {
                         } else if (appState.menuIndex == 2) {
                             bool ok = espNow.sendCommandWithAck('A', 2, 350);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showFileContent("LAMP", ok ? "Turn On AP ACK." : "Turn On AP ACK timeout.");
+                                if (ok) {
+                                    display.showApWifiQr();
+                                } else {
+                                    display.showFileContent("LAMP", "Turn On AP ACK timeout.");
+                                    isViewingFile = true;
+                                }
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
-                            isViewingFile = true;
                         } else if (appState.menuIndex == 3) {
                             espNow.sendCommandWithAck('F', 0, 0);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
