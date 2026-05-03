@@ -400,7 +400,7 @@ static void webTask(void* pvParameters) {
         if (mode == WEB_MODE_WIFI && dnsServer) dnsServer->processNextRequest();
         server->handleClient();
         vTaskDelay(pdMS_TO_TICKS(20));
-        if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER && appState.currentMenu != MENU_WIFI_SETUP) webServer.isRunning = false;
+        if (mode == WEB_MODE_WIFI && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER && appState.currentMenu != MENU_WIFI_SETUP) webServer.isRunning = false;
         if (mode == WEB_MODE_UPLOAD && appState.currentMenu != MENU_WEB_SERVER) webServer.isRunning = false;
     }
     server->stop();
@@ -426,7 +426,7 @@ bool WebServerLogic::runWiFiSetup() {
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
-        if (appState.currentMenu != MENU_STOCK && appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) return false;
+        if (appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) return false;
     }
     if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_AP_STA);

@@ -75,11 +75,9 @@ void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
 
 // =============================================
 
-const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. Stock Monitor", "4. OTA Update", "5. Web Server", "6. Exit"}; 
+const char* mainMenuItems[] = {"1. Control Set", "2. Lamp Set", "3. OTA Update", "4. Web Server", "5. Exit"}; 
 const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. WiFi Setup", "7. Back"}; 
 const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Turn On AP", "4. Reset", "5. HomeKit QR", "6. Back"};
-
-extern "C" void action_on_stock_changed_cb(lv_event_t * e);
 
 static lv_obj_t *homekit_qr_overlay = NULL;
 static lv_obj_t *homekit_qr_obj = NULL;
@@ -228,10 +226,6 @@ void DisplayLogic::begin() {
         lv_obj_set_style_bg_opa(objects.stock, LV_OPA_COVER, 0);
     }
     
-    if (objects.stock_roller != NULL) {
-        lv_obj_add_event_cb(objects.stock_roller, action_on_stock_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    }
-    
     scr_image_preview = lv_obj_create(NULL);
     
     lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
@@ -357,16 +351,6 @@ void DisplayLogic::updateUI(RemoteState &state) {
         return;
     }
 
-    if (state.currentMenu == MENU_STOCK) {
-        if (lv_scr_act() != objects.stock) { 
-            lv_scr_load(objects.stock); 
-            lv_obj_invalidate(objects.stock); // Ép vẽ lại toàn bộ màn hình mới
-            lastMenuType = (MenuLevel)-1; 
-        }
-        if (objects.stock_roller != NULL) lv_roller_set_selected(objects.stock_roller, state.stockIndex, LV_ANIM_ON);
-        return;
-    }
-
     if (state.currentMenu == MENU_NONE || state.currentMenu == MENU_SET_SLEEP || state.currentMenu == MENU_SET_BACKLIGHT) {
         if (lv_scr_act() != objects.main) { 
             lv_scr_load(objects.main); 
@@ -416,7 +400,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
 
         if (state.currentMenu != lastMenuType) {
             if (state.currentMenu == MENU_MAIN) {
-                lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 6); 
+                lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 5); 
             } 
             else if (state.currentMenu == MENU_CONTROL) {
                 lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 7); 

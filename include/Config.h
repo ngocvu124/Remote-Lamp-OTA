@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.1.1"
-#define FIRMWARE_NAME "AP WiFi QR on Turn On AP"
+#define FIRMWARE_VERSION "v1.6.2.0"
+#define FIRMWARE_NAME "Lean Remote (Stock Removed)"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];
@@ -97,11 +97,10 @@ enum MenuLevel {
     MENU_SET_SLEEP = 4,
     MENU_SET_BACKLIGHT = 5,
     MENU_ABOUT = 6, 
-    MENU_STOCK = 7,
-    MENU_OTA = 8,
-    MENU_WEB_SERVER = 9,
-    MENU_SELECT_BG = 10,
-    MENU_WIFI_SETUP = 11
+    MENU_OTA = 7,
+    MENU_WEB_SERVER = 8,
+    MENU_SELECT_BG = 9,
+    MENU_WIFI_SETUP = 10
 };
 
 struct RemoteState {
@@ -114,7 +113,6 @@ struct RemoteState {
     
     MenuLevel currentMenu = MENU_NONE;
     int menuIndex = 0;
-    int stockIndex = 0;
     
     int batteryLevel = 100;
     char bgFilePath[64] = "/bg.bin";

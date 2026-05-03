@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.2.0 (Lean Remote (Stock Removed))",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.0.bin"
+  },
+  {
     "name": "v1.6.1.1 (AP WiFi QR on Turn On AP)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.1.1.bin"
   },

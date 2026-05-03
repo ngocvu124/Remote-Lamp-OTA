@@ -5,7 +5,6 @@
 #include "Display.h"
 #include "System.h"
 #include "Storage.h" 
-#include "Stock.h"
 #include "Ota.h"
 #include "WebSv.h" 
 #include <WiFi.h>
@@ -13,7 +12,6 @@
 #include <SdFat.h>
 
 AppLogic app;
-TaskHandle_t stockTaskHandle = NULL;
 TaskHandle_t otaTaskHandle = NULL;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern QueueHandle_t xEncoderQueue;
@@ -27,7 +25,6 @@ static int selectedOtaIndex = -1;
 
 static bool pendingImageLoad = false; // Cờ báo hiệu load ảnh preview khi cuộn
 static uint32_t lastScrollTime = 0;   // Mốc thời gian để debounce việc cuộn
-static volatile bool forceStockUpdate = false; // Cờ báo hiệu cho luồng stock (cần volatile vì dùng xuyên Task)
 static uint32_t lastConfigSaveMs = 0;
 static bool configSavePending = false;
 
@@ -45,41 +42,6 @@ static void requestConfigSave(bool forceNow = false) {
         }
     } else {
         configSavePending = true;
-    }
-}
-
-
-void stockUpdateTask(void *pvParameters) {
-    uint32_t lastFetch = 0;
-    while (1) {
-        if (appState.currentMenu == MENU_STOCK) {
-            if (!webServer.runWiFiSetup()) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                continue;
-            }
-            char ticker[15];
-            stock.getTickerName(appState.stockIndex, ticker); 
-            
-            // Chỉ kéo dữ liệu nếu ticker hợp lệ (không phải dòng "--GAS--")
-            if (ticker[0] != '-') {
-                int delayInterval = strstr(ticker, "USDT") ? 3000 : 15000;
-                
-                // Kéo dữ liệu khi có lệnh ép (từ con lăn) HOẶC đã hết thời gian chờ
-                if (forceStockUpdate || millis() - lastFetch > delayInterval || lastFetch == 0) {
-                    forceStockUpdate = false;
-                    
-                    if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
-                        stock.fetchAndUpdateUI(appState.stockIndex); 
-                        xSemaphoreGiveRecursive(xGuiSemaphore);
-                    }
-                    lastFetch = millis();
-                }
-            }
-            vTaskDelay(pdMS_TO_TICKS(100)); // Quét trạng thái cực nhanh
-        } else {
-            stockTaskHandle = NULL;
-            vTaskDelete(NULL); 
-        }
     }
 }
 
@@ -226,9 +188,6 @@ void AppLogic::handleEvents() {
             }
             else {
                 appState.menuIndex = encoder.getEncoderValue(); 
-                if (appState.currentMenu == MENU_STOCK) {
-                    appState.stockIndex = appState.menuIndex;
-                }
 
                 if (isViewingImage && appState.currentMenu == MENU_SELECT_BG) {
                     if (appState.menuIndex == storage.bgFileCount) {
@@ -269,9 +228,8 @@ void AppLogic::handleEvents() {
                     case MENU_MAIN:
                         if (appState.menuIndex == 0) enterMenu(MENU_CONTROL);
                         else if (appState.menuIndex == 1) enterMenu(MENU_LAMP);
-                        else if (appState.menuIndex == 2) enterMenu(MENU_STOCK);
-                        else if (appState.menuIndex == 3) enterMenu(MENU_OTA); 
-                        else if (appState.menuIndex == 4) enterMenu(MENU_WEB_SERVER); 
+                        else if (appState.menuIndex == 2) enterMenu(MENU_OTA); 
+                        else if (appState.menuIndex == 3) enterMenu(MENU_WEB_SERVER); 
                         else exitMenu(); 
                         break;
                     case MENU_CONTROL:
@@ -459,15 +417,12 @@ void AppLogic::enterMenu(int level) {
         return;
     }
 
-    if (level == MENU_STOCK || level == MENU_OTA || level == MENU_WEB_SERVER) {
+    if (level == MENU_OTA || level == MENU_WEB_SERVER) {
         originalSleepTimeout = appState.sleepTimeout;
         if (originalSleepTimeout > 300) originalSleepTimeout = 60; // Gác cổng
         appState.sleepTimeout = 999999; 
         
-        if (level == MENU_STOCK) {
-            encoder.setBoundaries(0, 19, true); 
-            if (!stockTaskHandle) xTaskCreatePinnedToCore(stockUpdateTask, "StockTask", STACK_NETWORK, NULL, PRIO_NETWORK, &stockTaskHandle, 1);
-        } else if (level == MENU_OTA) {
+        if (level == MENU_OTA) {
             isViewingFile = false; selectedOtaIndex = -1;
             if (!otaTaskHandle) xTaskCreatePinnedToCore(otaUpdateTask, "OtaTask", STACK_NETWORK, NULL, PRIO_NETWORK, &otaTaskHandle, 1);
         } else if (level == MENU_WEB_SERVER) { isViewingFile = false; webServer.runBgUpload(); }
@@ -475,7 +430,7 @@ void AppLogic::enterMenu(int level) {
     }
     
     if (level == MENU_MAIN) {
-        encoder.setBoundaries(0, 5, true);         
+        encoder.setBoundaries(0, 4, true);         
     } 
     else if (level == MENU_CONTROL) {
         encoder.setBoundaries(0, 6, true); 
@@ -535,7 +490,7 @@ void AppLogic::exitMenu() {
             xSemaphoreGiveRecursive(xGuiSemaphore);
         }
     }
-    if (appState.currentMenu == MENU_STOCK || appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
+    if (appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 
     }
@@ -543,11 +498,4 @@ void AppLogic::exitMenu() {
     encoder.setBoundaries(0, 100, false);
     encoder.setEncoderValue(appState.isTempMode ? appState.temperature : appState.brightness);
     requestConfigSave(true); 
-}
-
-// Hàm Callback tách rời hoàn toàn: Khi xoay con lăn chỉ cần phất cờ
-extern "C" void action_on_stock_changed_cb(lv_event_t * e) {
-    lv_obj_t * roller = lv_event_get_target(e);
-    appState.stockIndex = lv_roller_get_selected(roller);
-    forceStockUpdate = true; // Phát tín hiệu để task ngầm tự kéo mạng
 }
