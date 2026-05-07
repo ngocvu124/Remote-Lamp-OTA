@@ -14,4 +14,6 @@ public:
 
 extern AppLogic app;
 
+void appTask(void *pvParameters);
+
 #endif

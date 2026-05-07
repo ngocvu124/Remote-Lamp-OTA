@@ -23,6 +23,7 @@ void StorageLogic::safeSync(RemoteState &state) {
         prefs.putInt("oled", state.oledBrightness);
         prefs.putInt("bri", state.brightness);
         prefs.putInt("tmp", state.temperature);
+        prefs.putBool("dev", state.devMode);
         prefs.putString("bg", safeBgPath.c_str());
         prefs.end();
         Serial.println("[STORAGE] safeSync: NVS saved.");
@@ -53,6 +54,8 @@ static bool loadConfigFromNvs(RemoteState &state) {
     state.temperature = prefs.getInt("tmp", 50);
     if (state.temperature < 0 || state.temperature > 100) state.temperature = 50;
 
+    state.devMode = prefs.getBool("dev", false);
+
     String bg = prefs.getString("bg", "/bg.bin");
     prefs.end();
 
@@ -64,8 +67,9 @@ static bool loadConfigFromNvs(RemoteState &state) {
         state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
     }
 
-    Serial.printf("[STORAGE-LOG] Loaded config from NVS: sleep=%d oled=%d bri=%d tmp=%d bg=%s\n",
-                  state.sleepTimeout, state.oledBrightness, state.brightness, state.temperature, state.bgFilePath);
+    Serial.printf("[STORAGE-LOG] Loaded config from NVS: sleep=%d oled=%d bri=%d tmp=%d dev=%d bg=%s\n",
+                  state.sleepTimeout, state.oledBrightness, state.brightness, state.temperature,
+                  state.devMode ? 1 : 0, state.bgFilePath);
     return true;
 }
 
@@ -82,6 +86,7 @@ static bool saveConfigToNvs(const RemoteState &state, const char *safeBgPath) {
     ok &= prefs.putInt("oled", state.oledBrightness) > 0;
     ok &= prefs.putInt("bri", state.brightness) > 0;
     ok &= prefs.putInt("tmp", state.temperature) > 0;
+    ok &= prefs.putBool("dev", state.devMode) == true;
     ok &= prefs.putString("bg", safeBgPath) > 0;
     prefs.end();
 

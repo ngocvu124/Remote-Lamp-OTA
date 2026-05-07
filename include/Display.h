@@ -15,16 +15,13 @@ public:
     void updateUI(RemoteState &state);
     void setContrast(int level);
     void turnOff();
-    void turnOn();
     void showFileContent(const char* title, const char* content);
     void showProgressPopup(const char* title, const char* msg, int percent);
     void closeProgressPopup();
     void forceRebuild(); 
     void loadBackgroundFromSD(); 
-    void showHomeKitQr();
-    void closeHomeKitQr();
-    void showApWifiQr();
-    void closeApWifiQr();
+    void showMatterQr();
+    void closeMatterQr();
 
     // BOOT LOG: gọi trước khi LVGL sẵn sàng, dùng tft trực tiếp
     void bootPrint(const char* tag, const char* msg, bool ok = true);
@@ -40,10 +37,10 @@ private:
     
     int currentMenuCount = 0;
     MenuLevel lastMenuType = MENU_NONE;
-    
-    lv_obj_t* menuButtons[25]; 
 };
 
 extern DisplayLogic display;
+
+void guiTask(void *pvParameters);
 
 #endif

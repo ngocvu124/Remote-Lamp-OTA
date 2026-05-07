@@ -76,6 +76,15 @@ void create_screen_main() {
                     lv_obj_set_style_text_color(obj, lv_color_hex(0xffffffff), LV_PART_MAIN | LV_STATE_DEFAULT);
                     lv_label_set_text(obj, "6%");
                 }
+                {
+                    // lamp_status
+                    lv_obj_t *obj = lv_label_create(parent_obj);
+                    objects.lamp_status = obj;
+                    lv_obj_set_pos(obj, 5, 5);
+                    lv_obj_set_size(obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+                    lv_obj_set_style_text_color(obj, lv_color_hex(0xff888888), LV_PART_MAIN | LV_STATE_DEFAULT);
+                    lv_label_set_text(obj, LV_SYMBOL_WIFI);
+                }
             }
         }
         {

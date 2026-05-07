@@ -13,4 +13,6 @@ public:
 
 extern BatteryLogic battery;
 
+void batteryTask(void *pvParameters);
+
 #endif

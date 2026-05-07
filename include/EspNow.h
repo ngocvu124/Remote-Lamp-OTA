@@ -19,4 +19,6 @@ public:
 
 extern EspNowLogic espNow;
 
+void espNowTask(void *pvParameters);
+
 #endif

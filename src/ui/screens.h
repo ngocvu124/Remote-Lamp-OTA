@@ -25,6 +25,7 @@ typedef struct _objects_t {
     lv_obj_t *u;
     lv_obj_t *ui_batbar;
     lv_obj_t *bat_value;
+    lv_obj_t *lamp_status;
     lv_obj_t *label_value;
     lv_obj_t *value;
     lv_obj_t *arc_value;

@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.2.7"
-#define FIRMWARE_NAME "Fix web list JSON escape"
+#define FIRMWARE_VERSION "v1.6.2.8"
+#define FIRMWARE_NAME "Last version"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];
@@ -20,11 +20,8 @@ const uint8_t ESPNOW_PMK[16] = {'S','L','M','a','t','t','e','r','P','M','K','2',
 const uint8_t ESPNOW_LMK[16] = {'S','L','R','e','m','o','t','e','L','M','K','2','0','2','6','!'};
 
 // Matter commissioning defaults (used as fallback before lamp syncs)
-#define HOMEKIT_SETUP_CODE "20202021"   // Matter passcode
-#define HOMEKIT_QR_ID "3840"           // Matter discriminator
-
-#define LAMP_AP_SSID     "SmartLamp-AP"
-#define LAMP_AP_PASSWORD "smartlamp"
+#define MATTER_SETUP_CODE "20202021"   // Matter passcode
+#define MATTER_QR_ID "3840"            // Matter discriminator
 
 // --- CẤU HÌNH PINOUT (ESP32-S3) ---
 #define SPI_SCK_PIN     4
@@ -57,10 +54,20 @@ const uint8_t ESPNOW_LMK[16] = {'S','L','R','e','m','o','t','e','L','M','K','2',
 #define SCREEN_WIDTH    240
 #define SCREEN_HEIGHT   240
 
-#define STACK_GUI       32768  
-#define STACK_NETWORK   16384  
-#define STACK_SYSTEM    16384
-#define STACK_WEB       16384   
+// FreeRTOS stack depth (word): 1024 ~= 4KB on ESP32.
+#define STACK_TASK_GUI      16384
+#define STACK_TASK_INPUT    4096
+#define STACK_TASK_APP      8192
+#define STACK_TASK_ESPNOW   8192
+#define STACK_TASK_BATTERY  4096
+#define STACK_TASK_OTA      16384
+#define STACK_TASK_WEB      16384
+
+// Legacy aliases kept to avoid breaking existing callsites.
+#define STACK_GUI       STACK_TASK_GUI
+#define STACK_NETWORK   STACK_TASK_OTA
+#define STACK_SYSTEM    STACK_TASK_APP
+#define STACK_WEB       STACK_TASK_WEB
 
 #define PRIO_INPUT      5     
 #define PRIO_GUI        4
@@ -101,14 +108,14 @@ enum MenuLevel {
     MENU_ABOUT = 6, 
     MENU_OTA = 7,
     MENU_WEB_SERVER = 8,
-    MENU_SELECT_BG = 9,
-    MENU_WIFI_SETUP = 10
+    MENU_SELECT_BG = 9
 };
 
 struct RemoteState {
     int brightness = 50;
     int temperature = 50;
     bool isTempMode = false;
+    bool devMode = false;
     
     int sleepTimeout = 60; 
     int oledBrightness = 50; 
@@ -117,11 +124,12 @@ struct RemoteState {
     int menuIndex = 0;
     
     int batteryLevel = 100;
+    bool lampConnected = false;
     char bgFilePath[64] = "/bg.bin";
 };
 
-extern char currentHomeKitSetupCode[9];
-extern char currentHomeKitQrId[5];
-extern bool homeKitQrSynced;
+extern char currentMatterSetupCode[9];
+extern char currentMatterQrId[5];
+extern bool matterQrSynced;
 
 #endif

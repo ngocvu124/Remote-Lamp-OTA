@@ -16,7 +16,7 @@ TaskHandle_t otaTaskHandle = NULL;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern QueueHandle_t xEncoderQueue;
 extern SdFs sd_bg; 
-extern bool homeKitQrSynced;
+extern bool matterQrSynced;
 
 static int originalSleepTimeout = 60; 
 static bool isViewingFile = false; 
@@ -42,6 +42,52 @@ static void requestConfigSave(bool forceFlush = false) {
             lastConfigSaveMs = now;
             configSavePending = false;
         }
+    }
+}
+
+extern volatile bool isGuiReady;
+extern volatile bool isStorageReady;
+
+void appTask(void *pvParameters) {
+    // Đợi display.begin() xong (guiTask đã vẽ boot log phase 1+2)
+    while (!isGuiReady) vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
+
+        // ── Boot log phase 3: SD Card ──────────────────────────
+        if (appState.devMode) display.bootPrint("SD", "Mounting SD card");
+        storage.begin();
+        // In kết quả thật của việc mount SD
+        if (appState.devMode && !storage.isReady) {
+            display.bootPrint("SD", "SD mount failed", false);
+        }
+
+        // ── Boot log phase 4: Config ───────────────────────────
+        if (storage.isReady) {
+            if (appState.devMode) display.bootPrint("CFG", "Loading config");
+            bool cfgOk = storage.loadConfig(appState);
+            if (appState.devMode) display.bootPrint("CFG", "Config loaded", cfgOk);
+            display.setContrast(appState.oledBrightness);
+        }
+
+        isStorageReady = true;
+
+        // ── Boot log phase 5: Dòng cuối ───────────────────────
+        if (appState.devMode) display.bootPrint("APP", "All systems ready!");
+
+        xSemaphoreGiveRecursive(xGuiSemaphore);
+    }
+
+    webServer.begin();
+    app.begin();
+
+    while (1) {
+        app.handleEvents();
+        if (millis() > 5000 && encoder.shouldSleep(appState.sleepTimeout * 1000UL)) {
+            sys.goToSleep();
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
@@ -135,8 +181,7 @@ void AppLogic::handleEvents() {
                     display.showFileContent(NULL, NULL); 
                     display.closeProgressPopup(); 
                     display.closeImagePreview(); 
-                    display.closeHomeKitQr();
-                        display.closeApWifiQr();
+                    display.closeMatterQr();
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
@@ -234,13 +279,12 @@ void AppLogic::handleEvents() {
                 if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(50))) {
                     display.showFileContent(NULL, NULL); 
                     display.closeImagePreview();
-                    display.closeHomeKitQr();
-                    display.closeApWifiQr();
+                    display.closeMatterQr();
                     xSemaphoreGiveRecursive(xGuiSemaphore);
                 }
                 if (appState.currentMenu == MENU_ABOUT) {
                     enterMenu(MENU_CONTROL);
-                    encoder.setEncoderValue(4); 
+                    encoder.setEncoderValue(6); 
                 } else {
                     encoder.setEncoderValue(appState.menuIndex); 
                 }
@@ -257,8 +301,18 @@ void AppLogic::handleEvents() {
                         else if (appState.menuIndex == 2) enterMenu(MENU_OTA);
                         else if (appState.menuIndex == 3) enterMenu(MENU_WEB_SERVER);
                         else if (appState.menuIndex == 4) enterMenu(MENU_SELECT_BG); 
-                        else if (appState.menuIndex == 5) enterMenu(MENU_ABOUT);
-                        else if (appState.menuIndex == 6) {
+                        else if (appState.menuIndex == 5) {
+                            appState.devMode = !appState.devMode;
+                            requestConfigSave(true);
+                            display.forceRebuild();
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showFileContent("DEV MODE", appState.devMode ? "Enabled" : "Disabled");
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            isViewingFile = true;
+                        }
+                        else if (appState.menuIndex == 6) enterMenu(MENU_ABOUT);
+                        else if (appState.menuIndex == 7) {
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent("REMOTE", "Restarting...");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
@@ -280,11 +334,11 @@ void AppLogic::handleEvents() {
                         } else if (appState.menuIndex == 1) {
                             // Pair assistant: open commissioning window first, then show setup QR.
                             bool ok = espNow.sendCommandWithAck('P', 2, 350);
-                            homeKitQrSynced = false;
+                            matterQrSynced = false;
                             espNow.sendCommandWithAck('Q', 2, 350);
                             vTaskDelay(pdMS_TO_TICKS(120));
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showHomeKitQr();
+                                display.showMatterQr();
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             if (!ok) {
@@ -421,7 +475,7 @@ void AppLogic::enterMenu(int level) {
         encoder.setBoundaries(0, 2, true);         
     } 
     else if (level == MENU_CONTROL) {
-        encoder.setBoundaries(0, 7, true); 
+        encoder.setBoundaries(0, 8, true); 
     }
     else if (level == MENU_LAMP) {
         encoder.setBoundaries(0, 5, true);
@@ -470,6 +524,19 @@ void AppLogic::enterMenu(int level) {
 }
 
 void AppLogic::exitMenu() {
+    // Always clear transient overlays when leaving menu to avoid stale popups
+    // (e.g. "No synced WiFi" in WEB/OTA flow remaining on next menu entry).
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(80))) {
+        display.closeProgressPopup();
+        display.showFileContent(NULL, NULL);
+        display.closeImagePreview();
+        display.closeMatterQr();
+        xSemaphoreGiveRecursive(xGuiSemaphore);
+    }
+    isViewingFile = false;
+    isViewingImage = false;
+    pendingImageLoad = false;
+
     if (appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 

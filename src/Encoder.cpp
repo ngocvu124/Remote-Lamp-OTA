@@ -94,3 +94,14 @@ void EncoderLogic::loop() {
         }
     }
 }
+
+extern volatile bool isStorageReady;
+
+void inputTask(void *pvParameters) {
+    while (!isStorageReady) vTaskDelay(pdMS_TO_TICKS(50));
+    encoder.begin();
+    while (1) {
+        encoder.loop();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}

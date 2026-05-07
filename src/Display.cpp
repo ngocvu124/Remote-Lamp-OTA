@@ -43,6 +43,10 @@ static size_t readFully(FsFile& file, uint8_t* dst, size_t bytesToRead) {
 static int bootY = 0;
 static const int BOOT_LINE_H = 14;
 
+extern SemaphoreHandle_t xGuiSemaphore;
+extern volatile bool isGuiReady;
+extern volatile bool isStorageReady;
+
 void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
     if (bootY > 220) return; // tràn màn hình thì thôi
 
@@ -73,14 +77,46 @@ void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
     bootY += BOOT_LINE_H;
 }
 
+void guiTask(void *pvParameters) {
+    display.begin();
+    isGuiReady = true;
+
+    // Chờ appTask hoàn tất boot log + storage init
+    while (!isStorageReady) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    // Delay nhỏ để người dùng kịp đọc dòng cuối boot log (chỉ khi dev mode)
+    if (appState.devMode) vTaskDelay(pdMS_TO_TICKS(1000));
+
+    uint32_t lastTick = millis();
+    while (1) {
+        uint32_t currentTick = millis();
+        uint32_t diff = currentTick - lastTick;
+        lastTick = currentTick;
+
+        uint32_t delay_ms = 5;
+        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(20))) {
+            lv_tick_inc(diff);
+            delay_ms = display.loop(); // lần đầu gọi này sẽ render UI đè lên boot log
+            xSemaphoreGiveRecursive(xGuiSemaphore);
+        }
+
+        if (delay_ms == 0 || delay_ms == 0xFFFFFFFF) delay_ms = 5;
+        else if (delay_ms > 50) delay_ms = 50;
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    }
+}
+
 // =============================================
 
 const char* mainMenuItems[] = {"1. Control Setting", "2. Lamp Setting", "3. Exit"}; 
-const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. OTA Update", "4. Web Server", "5. Change BG", "6. About", "7. Restart Remote", "8. Back"}; 
+const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. OTA Update", "4. Web Server", "5. Change BG", "6. Dev Mode", "7. About", "8. Restart Remote", "9. Back"}; 
 const char* lampMenuItems[] = {"1. Identify", "2. Pair (Open + QR)", "3. Restart", "4. Unpair", "5. Factory Reset", "6. Back"};
 
-static lv_obj_t *homekit_qr_overlay = NULL;
-static lv_obj_t *homekit_qr_obj = NULL;
+static lv_obj_t *matter_qr_overlay = NULL;
+static lv_obj_t *matter_qr_obj = NULL;
+static lv_obj_t *dev_stats_label = NULL;
 
 // Build Matter QR code payload (MT: prefix, base38 encoded, 22 chars total)
 static void buildMatterQrPayload(char *payload, size_t payloadSize) {
@@ -91,8 +127,8 @@ static void buildMatterQrPayload(char *payload, size_t payloadSize) {
 
     // Known-good Matter QR payload for default esp-matter test credentials:
     // passcode=20202021, discriminator=3840, vid=0xFFF1, pid=0x8000
-    const char *passcodeStr = currentHomeKitSetupCode[0] ? currentHomeKitSetupCode : HOMEKIT_SETUP_CODE;
-    const char *discStr     = currentHomeKitQrId[0]      ? currentHomeKitQrId      : HOMEKIT_QR_ID;
+    const char *passcodeStr = currentMatterSetupCode[0] ? currentMatterSetupCode : MATTER_SETUP_CODE;
+    const char *discStr     = currentMatterQrId[0]      ? currentMatterQrId      : MATTER_QR_ID;
     if (strcmp(passcodeStr, "20202021") == 0 && strcmp(discStr, "3840") == 0) {
         strncpy(payload, "MT:Y.K9042C00KA0648G00", payloadSize - 1);
         payload[payloadSize - 1] = '\0';
@@ -166,24 +202,26 @@ void DisplayLogic::begin() {
     tft.invertDisplay(true);
     tft.fillScreen(TFT_BLACK);
     
-    // Vẽ header boot screen
-    bootY = 8;
-    tft.setTextSize(1);
-    tft.setTextColor(TFT_ORANGE);
-    tft.setCursor(5, bootY);
-    tft.print("Remote Lamp ");
-    tft.print(FIRMWARE_VERSION);
-    bootY += BOOT_LINE_H;
+    if (appState.devMode) {
+        // Vẽ header boot screen
+        bootY = 8;
+        tft.setTextSize(1);
+        tft.setTextColor(TFT_ORANGE);
+        tft.setCursor(5, bootY);
+        tft.print("Remote Lamp ");
+        tft.print(FIRMWARE_VERSION);
+        bootY += BOOT_LINE_H;
 
-    tft.setTextColor(0x4208); // xám tối — đường kẻ phân cách
-    tft.setCursor(5, bootY);
-    tft.print("--------------------------------");
-    bootY += BOOT_LINE_H + 2;
+        tft.setTextColor(0x4208); // xám tối — đường kẻ phân cách
+        tft.setCursor(5, bootY);
+        tft.print("--------------------------------");
+        bootY += BOOT_LINE_H + 2;
 
-    // Log các bước khởi tạo phần cứng
-    bootPrint("SYS",  "Booting system");
-    bootPrint("GPIO", "Initializing pins");
-    bootPrint("SPI",  "Display driver loaded");
+        // Log các bước khởi tạo phần cứng
+        bootPrint("SYS",  "Booting system");
+        bootPrint("GPIO", "Initializing pins");
+        bootPrint("SPI",  "Display driver loaded");
+    }
     
     Serial.printf("\n[SYS] PSRAM Total: %d, Free: %d\n", ESP.getPsramSize(), ESP.getFreePsram());
     if (ESP.getPsramSize() == 0) {
@@ -192,7 +230,7 @@ void DisplayLogic::begin() {
     
 
     // ── Phase 2: Khởi tạo LVGL ────────────────────────────────
-    bootPrint("LVGL", "Init graphics engine");
+    if (appState.devMode) bootPrint("LVGL", "Init graphics engine");
 
     lv_init();
 
@@ -244,8 +282,24 @@ void DisplayLogic::begin() {
     
 
     // ── Phase 3: Tạo màn hình LVGL ────────────────────────────
-    bootPrint("UI", "Building screens");
+    if (appState.devMode) bootPrint("UI", "Building screens");
     ui_init(); // Dùng ui_init() để nạp đầy đủ Theme và Fonts mặc định
+
+    if (objects.main) {
+        dev_stats_label = lv_label_create(objects.main);
+        lv_obj_add_flag(dev_stats_label, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_set_style_text_font(dev_stats_label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(dev_stats_label, lv_color_hex(0xffd0d0d0), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(dev_stats_label, LV_OPA_40, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(dev_stats_label, lv_color_black(), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_left(dev_stats_label, 3, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_right(dev_stats_label, 3, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_top(dev_stats_label, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_pad_bottom(dev_stats_label, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_align(dev_stats_label, LV_ALIGN_BOTTOM_RIGHT, -4, -4);
+        lv_label_set_text(dev_stats_label, "");
+        lv_obj_add_flag(dev_stats_label, LV_OBJ_FLAG_HIDDEN);
+    }
 
     // Ensure all root screens are fully opaque so old frame data is never visible.
     if (objects.main) {
@@ -265,7 +319,7 @@ void DisplayLogic::begin() {
     
     lv_obj_set_style_bg_color(scr_image_preview, lv_color_black(), 0);
 
-    bootPrint("UI", "Screens ready");
+    if (appState.devMode) bootPrint("UI", "Screens ready");
 
     Serial.println("[DISPLAY] LVGL UI Initialized.");
     // Phần còn lại (SD, CFG, APP) sẽ do appTask gọi bootPrint() tiếp
@@ -394,6 +448,32 @@ void DisplayLogic::updateUI(RemoteState &state) {
         }
         if (objects.ui_batbar) lv_bar_set_value(objects.ui_batbar, state.batteryLevel, LV_ANIM_ON);
         if (objects.bat_value) lv_label_set_text_fmt(objects.bat_value, "%d%%", state.batteryLevel);
+        if (objects.lamp_status) {
+            lv_obj_set_style_text_color(objects.lamp_status,
+                state.lampConnected ? lv_color_hex(0xff00cc44) : lv_color_hex(0xff666666),
+                LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+        if (dev_stats_label) {
+            if (state.devMode) {
+                static uint32_t lastDevTick = 0;
+                static char devBuf[96];
+                const uint32_t now = millis();
+                if (lastDevTick == 0 || now - lastDevTick >= 1000) {
+                    const float chipTemp = temperatureRead();
+                    const uint32_t heapKb = ESP.getFreeHeap() / 1024;
+                    const uint32_t psramKb = ESP.getFreePsram() / 1024;
+                    snprintf(devBuf, sizeof(devBuf), "RAM %luk\nPS %luk\nT %.1fC",
+                             (unsigned long)heapKb,
+                             (unsigned long)psramKb,
+                             (double)chipTemp);
+                    lv_label_set_text(dev_stats_label, devBuf);
+                    lastDevTick = now;
+                }
+                lv_obj_clear_flag(dev_stats_label, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(dev_stats_label, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
         
         int val = 0; const char* title = ""; lv_color_t arc_color;
 
@@ -438,7 +518,20 @@ void DisplayLogic::updateUI(RemoteState &state) {
                 lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 3); 
             } 
             else if (state.currentMenu == MENU_CONTROL) {
-                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 8); 
+                static char devModeItem[32];
+                snprintf(devModeItem, sizeof(devModeItem), "6. Dev Mode: %s", state.devMode ? "ON" : "OFF");
+                const char* controlItems[9] = {
+                    controlMenuItems[0],
+                    controlMenuItems[1],
+                    controlMenuItems[2],
+                    controlMenuItems[3],
+                    controlMenuItems[4],
+                    devModeItem,
+                    controlMenuItems[6],
+                    controlMenuItems[7],
+                    controlMenuItems[8]
+                };
+                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlItems, 9); 
             }
             else if (state.currentMenu == MENU_LAMP) {
                 lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 6);
@@ -483,99 +576,46 @@ void DisplayLogic::turnOff() {
     // Neu gui Sleep In, tft.begin() sau wake khong tu gui Sleep Out,
     // khien IC bo qua lenh ve va man hinh bi "dinh" anh cu.
 }
-void DisplayLogic::turnOn() {
-    tft.writecommand(0x11); // Sleep out
-    delay(120);
-    setContrast(appState.oledBrightness);
-}
 
-void DisplayLogic::showHomeKitQr() {
-    closeHomeKitQr();
+void DisplayLogic::showMatterQr() {
+    closeMatterQr();
 
     char payload[23] = {0};
     buildMatterQrPayload(payload, sizeof(payload));
 
-    homekit_qr_overlay = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(homekit_qr_overlay, 230, 230);
-    lv_obj_center(homekit_qr_overlay);
-    lv_obj_set_style_radius(homekit_qr_overlay, 12, 0);
-    lv_obj_set_style_bg_color(homekit_qr_overlay, lv_color_hex(0x111111), 0);
-    lv_obj_set_style_bg_opa(homekit_qr_overlay, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(homekit_qr_overlay, 0, 0);
-    lv_obj_set_style_pad_all(homekit_qr_overlay, 10, 0);
+    matter_qr_overlay = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(matter_qr_overlay, 230, 230);
+    lv_obj_center(matter_qr_overlay);
+    lv_obj_set_style_radius(matter_qr_overlay, 12, 0);
+    lv_obj_set_style_bg_color(matter_qr_overlay, lv_color_hex(0x111111), 0);
+    lv_obj_set_style_bg_opa(matter_qr_overlay, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(matter_qr_overlay, 0, 0);
+    lv_obj_set_style_pad_all(matter_qr_overlay, 10, 0);
 
-    lv_obj_t *title = lv_label_create(homekit_qr_overlay);
+    lv_obj_t *title = lv_label_create(matter_qr_overlay);
     lv_label_set_text(title, "Matter Setup QR");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
 
-    homekit_qr_obj = lv_qrcode_create(homekit_qr_overlay, 140, lv_color_black(), lv_color_white());
-    lv_qrcode_update(homekit_qr_obj, payload, strlen(payload));
-    lv_obj_align(homekit_qr_obj, LV_ALIGN_CENTER, 0, 8);
+    matter_qr_obj = lv_qrcode_create(matter_qr_overlay, 140, lv_color_black(), lv_color_white());
+    lv_qrcode_update(matter_qr_obj, payload, strlen(payload));
+    lv_obj_align(matter_qr_obj, LV_ALIGN_CENTER, 0, 8);
 
-    const char *setupCodeStr = currentHomeKitSetupCode[0] ? currentHomeKitSetupCode : HOMEKIT_SETUP_CODE;
-    lv_obj_t *code = lv_label_create(homekit_qr_overlay);
+    const char *setupCodeStr = currentMatterSetupCode[0] ? currentMatterSetupCode : MATTER_SETUP_CODE;
+    lv_obj_t *code = lv_label_create(matter_qr_overlay);
     lv_label_set_text_fmt(code, "Code: %.4s-%.4s", setupCodeStr, setupCodeStr + 4);
     lv_obj_align(code, LV_ALIGN_BOTTOM_MID, 0, -18);
 
-    lv_obj_t *hint = lv_label_create(homekit_qr_overlay);
-    lv_label_set_text(hint, homeKitQrSynced ? "Synced from lamp" : "Default code");
+    lv_obj_t *hint = lv_label_create(matter_qr_overlay);
+    lv_label_set_text(hint, matterQrSynced ? "Synced from lamp" : "Default code");
     lv_obj_set_style_text_color(hint, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, 0);
 }
 
-void DisplayLogic::closeHomeKitQr() {
-    if (homekit_qr_overlay) {
-        lv_obj_del(homekit_qr_overlay);
-        homekit_qr_overlay = NULL;
-        homekit_qr_obj = NULL;
-    }
-}
-
-// ===== AP WiFi QR =====
-static lv_obj_t *ap_qr_overlay = NULL;
-static lv_obj_t *ap_qr_obj = NULL;
-
-void DisplayLogic::showApWifiQr() {
-    closeApWifiQr();
-
-    char payload[80];
-    snprintf(payload, sizeof(payload), "WIFI:T:WPA;S:%s;P:%s;;", LAMP_AP_SSID, LAMP_AP_PASSWORD);
-
-    ap_qr_overlay = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(ap_qr_overlay, 230, 230);
-    lv_obj_center(ap_qr_overlay);
-    lv_obj_set_style_radius(ap_qr_overlay, 12, 0);
-    lv_obj_set_style_bg_color(ap_qr_overlay, lv_color_hex(0x0a1a2a), 0);
-    lv_obj_set_style_bg_opa(ap_qr_overlay, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(ap_qr_overlay, lv_palette_main(LV_PALETTE_CYAN), 0);
-    lv_obj_set_style_border_width(ap_qr_overlay, 2, 0);
-    lv_obj_set_style_pad_all(ap_qr_overlay, 8, 0);
-
-    lv_obj_t *title = lv_label_create(ap_qr_overlay);
-    lv_label_set_text(title, "Connect to Lamp AP");
-    lv_obj_set_style_text_color(title, lv_palette_main(LV_PALETTE_CYAN), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
-
-    ap_qr_obj = lv_qrcode_create(ap_qr_overlay, 140, lv_color_black(), lv_color_white());
-    lv_qrcode_update(ap_qr_obj, payload, strlen(payload));
-    lv_obj_align(ap_qr_obj, LV_ALIGN_CENTER, 0, 5);
-
-    lv_obj_t *ssid_label = lv_label_create(ap_qr_overlay);
-    lv_label_set_text_fmt(ssid_label, "SSID: %s", LAMP_AP_SSID);
-    lv_obj_set_style_text_color(ssid_label, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
-    lv_obj_align(ssid_label, LV_ALIGN_BOTTOM_MID, 0, -16);
-
-    lv_obj_t *hint = lv_label_create(ap_qr_overlay);
-    lv_label_set_text(hint, "Scan to configure WiFi");
-    lv_obj_set_style_text_color(hint, lv_palette_lighten(LV_PALETTE_GREY, 1), 0);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, 0);
-}
-
-void DisplayLogic::closeApWifiQr() {
-    if (ap_qr_overlay) {
-        lv_obj_del(ap_qr_overlay);
-        ap_qr_overlay = NULL;
-        ap_qr_obj = NULL;
+void DisplayLogic::closeMatterQr() {
+    if (matter_qr_overlay) {
+        lv_obj_del(matter_qr_overlay);
+        matter_qr_overlay = NULL;
+        matter_qr_obj = NULL;
     }
 }
 

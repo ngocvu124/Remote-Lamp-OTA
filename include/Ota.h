@@ -15,7 +15,6 @@ public:
 
     bool fetchVersions();
     void begin(const char* firmwareUrl);
-    void loop();
 };
 
 extern OtaLogic ota;

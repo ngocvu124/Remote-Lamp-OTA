@@ -27,4 +27,6 @@ private:
 
 extern EncoderLogic encoder;
 
+void inputTask(void *pvParameters);
+
 #endif

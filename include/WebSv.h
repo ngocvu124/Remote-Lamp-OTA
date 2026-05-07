@@ -5,8 +5,7 @@
 
 enum WebServerMode {
     WEB_MODE_NONE = 0,
-    WEB_MODE_WIFI = 1,
-    WEB_MODE_UPLOAD = 2
+    WEB_MODE_UPLOAD = 1
 };
 
 class WebServerLogic {
@@ -14,8 +13,6 @@ public:
     void begin();
     bool runWiFiSetup(); 
     void runBgUpload();  
-    void runWebServerOnly(); // HÀM MỚI KẾT NỐI WIFI NHÀ
-    void runWiFiPortal();    // Luôn mở AP để setup WiFi
     
     volatile bool isRunning;
 };
