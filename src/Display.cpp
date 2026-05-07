@@ -4,7 +4,11 @@
 #include "Storage.h" 
 #include "Ota.h" 
 #include <esp_heap_caps.h>
-#include <SdFat.h> 
+#include <SdFat.h>
+// SdFat defines FILE_READ/FILE_WRITE macros that clash with LittleFS — undef before include
+#undef FILE_READ
+#undef FILE_WRITE
+#include <LittleFS.h>
 #include "System.h"
 
 TFT_eSPI tft = TFT_eSPI();
@@ -328,82 +332,109 @@ void DisplayLogic::begin() {
 
 
 void DisplayLogic::loadBackgroundFromSD() {
-    if (!storage.isReady) return; // Thêm dòng này để chống crash nếu thẻ nhớ chưa mount hoặc bị lỏng
+    bool fileLoaded = false;
 
-    digitalWrite(SCR_CS_PIN, HIGH);
-    FsFile file = sd_bg.open(appState.bgFilePath, O_RDONLY);
-    if (!file) {
-        sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
-        file = sd_bg.open(appState.bgFilePath, O_RDONLY);
-    }
-    if (!file) file = sd_bg.open("/bg.bin", O_RDONLY);
-    if (!file) return;
+    // ── Thử load từ SD trước ──────────────────────────────────
+    if (storage.isReady) {
+        digitalWrite(SCR_CS_PIN, HIGH);
+        FsFile file = sd_bg.open(appState.bgFilePath, O_RDONLY);
+        if (!file) {
+            sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
+            file = sd_bg.open(appState.bgFilePath, O_RDONLY);
+        }
+        if (!file) file = sd_bg.open("/bg.bin", O_RDONLY);
 
-    file.seekSet(0);
-
-    size_t fileSize = file.size();
-    if (fileSize < FRAME_BYTES) {
-        Serial.printf("[DISPLAY] BG file too small: %lu bytes\n", (unsigned long)fileSize);
-        file.close();
-        return;
-    }
-
-    if (bg_data_buffer != NULL) { 
-        free(bg_data_buffer); 
-        bg_data_buffer = NULL; 
-    }
-
-    size_t allocSize = FRAME_BYTES; // Full frame 240x240 RGB565
-
-    Serial.printf("[DISPLAY] BG Alloc: %d bytes\n", allocSize);
-    bg_data_buffer = (uint8_t*)heap_caps_calloc(1, allocSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!bg_data_buffer) Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
-    
-    if (bg_data_buffer) {
-        size_t totalRead = readFully(file, bg_data_buffer, allocSize);
-        if (totalRead == 0) {
+        if (file) {
             file.seekSet(0);
-            vTaskDelay(pdMS_TO_TICKS(2));
-            totalRead = readFully(file, bg_data_buffer, allocSize);
-        }
-
-        if (totalRead == allocSize) { 
-            custom_bg.header.always_zero = 0;
-            custom_bg.header.w = 240;
-            custom_bg.header.h = 240;
-            custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
-            custom_bg.data_size = allocSize;
-            custom_bg.data = bg_data_buffer;
-            
-            lv_img_cache_invalidate_src(NULL);
-            
-            if (objects.main) {
-                lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
-                lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
-                lv_obj_set_style_bg_color(objects.main, lv_color_black(), 0);
-                lv_obj_set_style_bg_opa(objects.main, 255, 0); // Bắt buộc phải là 255 (LV_OPA_COVER) để xóa màn hình cũ
-                lv_obj_invalidate(objects.main);
+            if (file.size() >= FRAME_BYTES) {
+                if (bg_data_buffer) { free(bg_data_buffer); bg_data_buffer = NULL; }
+                Serial.printf("[DISPLAY] BG SD Alloc: %u bytes\n", (unsigned)FRAME_BYTES);
+                bg_data_buffer = (uint8_t*)heap_caps_calloc(1, FRAME_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (bg_data_buffer) {
+                    size_t n = readFully(file, bg_data_buffer, FRAME_BYTES);
+                    if (n == 0) { file.seekSet(0); vTaskDelay(pdMS_TO_TICKS(2)); n = readFully(file, bg_data_buffer, FRAME_BYTES); }
+                    if (n == FRAME_BYTES) {
+                        fileLoaded = true;
+                        Serial.println("[DISPLAY] SD BG loaded OK");
+                    } else {
+                        Serial.printf("[DISPLAY] SD BG read short: %u/%u bytes\n", (unsigned)n, (unsigned)FRAME_BYTES);
+                    }
+                } else {
+                    Serial.println("[DISPLAY] BG Alloc FAIL: PSRAM not available or full!");
+                }
+            } else {
+                Serial.printf("[DISPLAY] SD BG file too small: %u bytes\n", (unsigned)file.size());
             }
-            if (objects.menu) {
-                lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
-                lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
-                lv_obj_set_style_bg_color(objects.menu, lv_color_black(), 0);
-                lv_obj_set_style_bg_opa(objects.menu, 255, 0);
-                lv_obj_invalidate(objects.menu);
-            }
-            if (objects.stock) {
-                lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
-                lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
-                lv_obj_set_style_bg_color(objects.stock, lv_color_black(), 0);
-                lv_obj_set_style_bg_opa(objects.stock, 255, 0);
-                lv_obj_invalidate(objects.stock);
-            }
-        } else {
-            Serial.printf("[DISPLAY] BG read short: %lu/%lu bytes\n",
-                          (unsigned long)totalRead, (unsigned long)allocSize);
+            file.close();
         }
     }
-    file.close();
+
+    // ── Fallback: load từ LittleFS /bg.bin ───────────────────
+    if (!fileLoaded) {
+        Serial.println("[DISPLAY] SD BG unavailable, trying LittleFS /bg.bin...");
+        File lf = LittleFS.open("/bg.bin", "r");
+        if (lf) {
+            if (lf.size() >= FRAME_BYTES) {
+                if (bg_data_buffer) { free(bg_data_buffer); bg_data_buffer = NULL; }
+                bg_data_buffer = (uint8_t*)heap_caps_calloc(1, FRAME_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                if (bg_data_buffer) {
+                    size_t total = 0;
+                    while (total < FRAME_BYTES) {
+                        int r = lf.read(bg_data_buffer + total, FRAME_BYTES - total);
+                        if (r <= 0) break;
+                        total += (size_t)r;
+                    }
+                    if (total == FRAME_BYTES) {
+                        fileLoaded = true;
+                        Serial.println("[DISPLAY] LittleFS BG loaded OK");
+                    } else {
+                        Serial.printf("[DISPLAY] LittleFS BG read short: %u/%u bytes\n", (unsigned)total, (unsigned)FRAME_BYTES);
+                    }
+                } else {
+                    Serial.println("[DISPLAY] BG Alloc FAIL (LittleFS fallback)");
+                }
+            } else {
+                Serial.printf("[DISPLAY] LittleFS BG too small: %u bytes\n", (unsigned)lf.size());
+            }
+            lf.close();
+        } else {
+            Serial.println("[DISPLAY] LittleFS /bg.bin not found");
+        }
+    }
+
+    if (!fileLoaded) return;
+
+    // ── Áp lên các màn hình LVGL ──────────────────────────────
+    custom_bg.header.always_zero = 0;
+    custom_bg.header.w = 240;
+    custom_bg.header.h = 240;
+    custom_bg.header.cf = LV_IMG_CF_TRUE_COLOR;
+    custom_bg.data_size = FRAME_BYTES;
+    custom_bg.data = bg_data_buffer;
+
+    lv_img_cache_invalidate_src(NULL);
+
+    if (objects.main) {
+        lv_obj_set_style_bg_img_src(objects.main, NULL, 0);
+        lv_obj_set_style_bg_img_src(objects.main, &custom_bg, 0);
+        lv_obj_set_style_bg_color(objects.main, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(objects.main, 255, 0);
+        lv_obj_invalidate(objects.main);
+    }
+    if (objects.menu) {
+        lv_obj_set_style_bg_img_src(objects.menu, NULL, 0);
+        lv_obj_set_style_bg_img_src(objects.menu, &custom_bg, 0);
+        lv_obj_set_style_bg_color(objects.menu, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(objects.menu, 255, 0);
+        lv_obj_invalidate(objects.menu);
+    }
+    if (objects.stock) {
+        lv_obj_set_style_bg_img_src(objects.stock, NULL, 0);
+        lv_obj_set_style_bg_img_src(objects.stock, &custom_bg, 0);
+        lv_obj_set_style_bg_color(objects.stock, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(objects.stock, 255, 0);
+        lv_obj_invalidate(objects.stock);
+    }
 }
 
 uint32_t DisplayLogic::loop() { return lv_timer_handler(); }
