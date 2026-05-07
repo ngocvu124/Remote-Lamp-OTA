@@ -150,8 +150,8 @@ static void webTask(void* pvParameters) {
     if (mode == WEB_MODE_UPLOAD) {
         
         server->on("/", HTTP_GET, [server]() {
-            File file = LittleFS.open("/upload.html", "r");
-            if (!file) { server->send(500, "text/plain", "Missing upload.html"); return; }
+            File file = LittleFS.open("/home.html", "r");
+            if (!file) { server->send(500, "text/plain", "Missing home.html"); return; }
             server->streamFile(file, "text/html"); 
             file.close();
         });
