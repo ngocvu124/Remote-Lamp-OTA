@@ -191,16 +191,17 @@ void DisplayLogic::my_indev_read(lv_indev_drv_t * drv, lv_indev_data_t*data){
 
 void DisplayLogic::begin() {
     // ── Phase 1: Khởi tạo phần cứng màn hình ──────────────────
-    pinMode(SCR_BLK_PIN, OUTPUT);
-    ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
-    ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
-    ledcWrite(BACKLIGHT_CHANNEL, 255);      
-
     tft.begin();
     tft.setSwapBytes(true); 
     tft.setRotation(2); 
     tft.invertDisplay(true);
     tft.fillScreen(TFT_BLACK);
+
+    // TFT_eSPI co the ghi de chan BL trong tft.begin(), vi vay attach PWM sau cung.
+    pinMode(SCR_BLK_PIN, OUTPUT);
+    ledcSetup(BACKLIGHT_CHANNEL, 5000, 8);
+    ledcAttachPin(SCR_BLK_PIN, BACKLIGHT_CHANNEL);
+    ledcWrite(BACKLIGHT_CHANNEL, 255);
     
     if (appState.devMode) {
         // Vẽ header boot screen
@@ -569,7 +570,10 @@ void DisplayLogic::updateUI(RemoteState &state) {
     }
 }
 
-void DisplayLogic::setContrast(int level) { ledcWrite(BACKLIGHT_CHANNEL, map(level, 0, 100, 0, 255)); }
+void DisplayLogic::setContrast(int level) {
+    level = constrain(level, 0, 100);
+    ledcWrite(BACKLIGHT_CHANNEL, map(level, 0, 100, 0, 255));
+}
 void DisplayLogic::turnOff() {
     ledcWrite(BACKLIGHT_CHANNEL, 0);
     // KHONG gui Sleep In (0x10) cho display IC truoc deep sleep.

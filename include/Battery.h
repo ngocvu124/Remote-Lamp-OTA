@@ -6,7 +6,7 @@
 class BatteryLogic {
 public:
     void begin();
-    void update(RemoteState &state);
+    bool update(RemoteState &state);
     int getPercentage();
     float readRawVoltage();
 };

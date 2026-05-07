@@ -35,13 +35,22 @@ int BatteryLogic::getPercentage() {
     return constrain((int)pct, 0, 100);
 }
 
-void BatteryLogic::update(RemoteState &state) {
-    float currentVolts = readRawVoltage();
-    int newBat = getPercentage();
+bool BatteryLogic::update(RemoteState &state) {
+    float volts = readRawVoltage();
+    int newBat;
+
+    if (volts >= 4.20f) newBat = 100;
+    else if (volts <= 3.20f) newBat = 0;
+    else {
+        float pct = (volts - 3.20f) / (4.20f - 3.20f) * 100.0f;
+        newBat = constrain((int)pct, 0, 100);
+    }
 
     if (newBat != state.batteryLevel) {
         state.batteryLevel = newBat;
+        return true;
     }
+    return false;
 }
 
 void batteryTask(void *pvParameters) {
@@ -49,7 +58,12 @@ void batteryTask(void *pvParameters) {
     battery.begin();
     bool lowBatWarned = false;
     while (1) {
-        battery.update(appState);
+        bool changed = battery.update(appState);
+        if (changed && xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+            display.updateUI(appState);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
+        }
+
         if (appState.batteryLevel <= 15 && !lowBatWarned) {
             lowBatWarned = true;
             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
