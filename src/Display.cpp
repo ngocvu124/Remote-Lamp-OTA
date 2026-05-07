@@ -576,9 +576,6 @@ void DisplayLogic::setContrast(int level) {
 }
 void DisplayLogic::turnOff() {
     ledcWrite(BACKLIGHT_CHANNEL, 0);
-    // KHONG gui Sleep In (0x10) cho display IC truoc deep sleep.
-    // Neu gui Sleep In, tft.begin() sau wake khong tu gui Sleep Out,
-    // khien IC bo qua lenh ve va man hinh bi "dinh" anh cu.
 }
 
 void DisplayLogic::showMatterQr() {
