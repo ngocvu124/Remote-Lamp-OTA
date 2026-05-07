@@ -16,10 +16,12 @@ extern char cachedSSID[32];
 // --- CẤU HÌNH KẾT NỐI ESP-NOW ---
 #define WIFI_CHANNEL 11
 const uint8_t BROADCAST_ADDRESS[] = {0xDC, 0x06, 0x75, 0x69, 0x1C, 0xA4};
+const uint8_t ESPNOW_PMK[16] = {'S','L','M','a','t','t','e','r','P','M','K','2','0','2','6','!'};
+const uint8_t ESPNOW_LMK[16] = {'S','L','R','e','m','o','t','e','L','M','K','2','0','2','6','!'};
 
-#define HOMEKIT_SETUP_CODE "46637726"
-#define HOMEKIT_QR_ID "HSPN"
-#define HOMEKIT_CATEGORY 5
+// Matter commissioning defaults (used as fallback before lamp syncs)
+#define HOMEKIT_SETUP_CODE "20202021"   // Matter passcode
+#define HOMEKIT_QR_ID "3840"           // Matter discriminator
 
 #define LAMP_AP_SSID     "SmartLamp-AP"
 #define LAMP_AP_PASSWORD "smartlamp"

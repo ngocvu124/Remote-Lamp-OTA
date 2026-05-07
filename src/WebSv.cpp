@@ -3,6 +3,7 @@
 #include "Display.h"
 #include "Storage.h"
 #include "System.h"
+#include "EspNow.h"
 #include <WiFi.h>
 #include <DNSServer.h>
 #include <esp_heap_caps.h>
@@ -500,22 +501,39 @@ static void webTask(void* pvParameters) {
 
 bool WebServerLogic::runWiFiSetup() {
     if (WiFi.status() == WL_CONNECTED) return true;
+
+    // Pull latest credentials from lamp (if available) before attempting OTA/Web Wi-Fi.
+    espNow.requestWifiSync(2, 500);
+
+    char ssid[33] = {0};
+    char pass[65] = {0};
+    if (!espNow.getSyncedWifiCreds(ssid, sizeof(ssid), pass, sizeof(pass))) {
+        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+            display.showProgressPopup("WIFI", "No synced WiFi.\nSetup WiFi on lamp\nthen retry.", 0);
+            xSemaphoreGiveRecursive(xGuiSemaphore);
+        }
+        return false;
+    }
+
     WiFi.mode(WIFI_STA);
-    WiFi.begin(); 
+    WiFi.begin(ssid, pass);
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
         attempts++;
         if (appState.currentMenu != MENU_OTA && appState.currentMenu != MENU_WEB_SERVER) return false;
     }
-    if (WiFi.status() == WL_CONNECTED) return true;
-    WiFi.mode(WIFI_AP_STA);
-    isRunning = true;
-    // Bơm 16KB Stack cho WebTask thay vì chỉ 8KB như cũ
-    xTaskCreatePinnedToCore(webTask, "WebTask", 16384, (void*)WEB_MODE_WIFI, PRIO_WEB, NULL, 1);
-    while (isRunning) vTaskDelay(pdMS_TO_TICKS(100));
-    strncpy(cachedSSID, WiFi.SSID().c_str(), sizeof(cachedSSID));
-    return WiFi.status() == WL_CONNECTED;
+    if (WiFi.status() == WL_CONNECTED) {
+        strncpy(cachedSSID, ssid, sizeof(cachedSSID) - 1);
+        cachedSSID[sizeof(cachedSSID) - 1] = '\0';
+        return true;
+    }
+
+    if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+        display.showProgressPopup("WIFI", "Cannot connect with\nsynced WiFi from lamp.", 0);
+        xSemaphoreGiveRecursive(xGuiSemaphore);
+    }
+    return false;
 }
 
 void WebServerLogic::runWiFiPortal() {

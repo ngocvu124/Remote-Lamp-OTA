@@ -15,7 +15,6 @@ extern TFT_eSPI tft;
 // Flush pending config to NVS+SD then sync SD write buffer before power-off or reset.
 void StorageLogic::safeSync(RemoteState &state) {
     Serial.println("[STORAGE] safeSync: flushing config to NVS...");
-    // Always save to NVS (fast, no SPI needed)
     Preferences prefs;
     if (prefs.begin("rlamp", false)) {
         const String safeBgPath = (state.bgFilePath[0] == '/') ? state.bgFilePath : "/bg.bin";
@@ -27,23 +26,6 @@ void StorageLogic::safeSync(RemoteState &state) {
         prefs.putString("bg", safeBgPath.c_str());
         prefs.end();
         Serial.println("[STORAGE] safeSync: NVS saved.");
-    }
-    // Sync SD write buffer (close open handles, flush FAT) if card is ready
-    if (isReady) {
-        bool hasLock = false;
-        if (xGuiSemaphore != NULL) {
-            hasLock = (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(300)) == pdTRUE);
-        }
-        if (hasLock) {
-            digitalWrite(SCR_CS_PIN, HIGH);
-            if (sd_bg.card()) {
-                sd_bg.card()->syncDevice();
-            }
-            Serial.println("[STORAGE] safeSync: SD synced.");
-            xSemaphoreGiveRecursive(xGuiSemaphore);
-        } else {
-            Serial.println("[STORAGE] safeSync: could not lock SPI for SD sync (skip).");
-        }
     }
 }
 
@@ -219,11 +201,8 @@ void StorageLogic::loadBgFiles() {
 
 
 bool StorageLogic::saveConfig(RemoteState &state) {
-    Serial.println("[STORAGE-LOG] saveConfig() started");
     if (!isReady) return false;
-    
-    // Phải khóa Bus SPI (thông qua GuiSemaphore) trước khi cho SD Card ghi để tránh đụng độ TFT
-    bool saved = false;
+
     char safeBgPath[sizeof(state.bgFilePath)] = {0};
     size_t bgLen = strnlen(state.bgFilePath, sizeof(state.bgFilePath));
     if (bgLen > 0 && bgLen < sizeof(state.bgFilePath) && state.bgFilePath[0] == '/') {
@@ -235,56 +214,9 @@ bool StorageLogic::saveConfig(RemoteState &state) {
         state.bgFilePath[sizeof(state.bgFilePath) - 1] = '\0';
     }
 
-    // Save NVS first (primary persistence, independent from SD/SPI contention).
-    const bool nvsSaved = saveConfigToNvs(state, safeBgPath);
-
-    if (xGuiSemaphore != NULL && xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(500))) {
-        digitalWrite(SCR_CS_PIN, HIGH);
-        // Dùng config.txt thay cho .json để tương thích chuẩn 8.3 của FAT32
-        FsFile file = sd_bg.open("/config.txt", O_WRONLY | O_CREAT | O_TRUNC);
-        if (!file) {
-            sd_bg.begin(SdSpiConfig(SD_CS_PIN, SHARED_SPI, SD_SCK_MHZ(4), &SPI));
-            file = sd_bg.open("/config.txt", O_WRONLY | O_CREAT | O_TRUNC);
-        }
-        if (file) {
-            StaticJsonDocument<512> doc;
-            doc["sleepTimeout"] = (state.sleepTimeout > 300) ? 60 : state.sleepTimeout;
-            doc["oledBrightness"] = state.oledBrightness;
-            doc["brightness"] = state.brightness;
-            doc["temperature"] = state.temperature;
-            doc["bgFilePath"] = safeBgPath;
-            
-            String jsonStr;
-            serializeJson(doc, jsonStr);
-            size_t wr = file.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
-            file.sync(); // Ép thẻ SD phải ghi vật lý ngay lập tức
-            file.close();
-
-            // Ghi them ban backup de co the phuc hoi neu config chinh bi hong.
-            FsFile bak = sd_bg.open("/config.bak", O_WRONLY | O_CREAT | O_TRUNC);
-            if (bak) {
-                bak.write((const uint8_t*)jsonStr.c_str(), jsonStr.length());
-                bak.sync();
-                bak.close();
-            }
-
-            if (wr == jsonStr.length()) {
-                Serial.println("[STORAGE-LOG] Config saved successfully.");
-                saved = true;
-            } else {
-                Serial.printf("[STORAGE-LOG] Config write short! expected=%u written=%u\n",
-                              (unsigned)jsonStr.length(), (unsigned)wr);
-            }
-        } else {
-            Serial.println("[STORAGE-LOG] saveConfig: Failed to open /config.txt for writing!");
-        }
-        xSemaphoreGiveRecursive(xGuiSemaphore);
-    } else {
-        Serial.println("[STORAGE-LOG] saveConfig: Failed to get SPI lock!");
-    }
-
-    // Treat success if either NVS or SD save succeeded.
-    return saved || nvsSaved;
+    const bool ok = saveConfigToNvs(state, safeBgPath);
+    if (ok) Serial.println("[STORAGE] Config saved to NVS.");
+    return ok;
 }
 
 bool StorageLogic::loadConfig(RemoteState &state) {

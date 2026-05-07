@@ -25,23 +25,23 @@ static int selectedOtaIndex = -1;
 
 static bool pendingImageLoad = false; // Cờ báo hiệu load ảnh preview khi cuộn
 static uint32_t lastScrollTime = 0;   // Mốc thời gian để debounce việc cuộn
+static uint32_t lastEncEventTime = 0; // Mốc thời gian event encoder trước — dùng cho gia tốc
+static EncoderEvent lastEncDir = ENC_CLICK; // Hướng vặn trước — dùng để phát hiện bounce ngược chiều
 static uint32_t lastConfigSaveMs = 0;
 static bool configSavePending = false;
 
 extern volatile bool espnow_needs_update;
 
-static void requestConfigSave(bool forceNow = false) {
+// Ghi NVS tối đa 1 lần / 10 giây để bảo vệ flash.
+// forceFlush = true chỉ dùng khi sắp sleep/shutdown — ghi ngay bất kể thời gian.
+static void requestConfigSave(bool forceFlush = false) {
     const uint32_t now = millis();
-    if (forceNow || now - lastConfigSaveMs >= 1200) {
+    configSavePending = true;
+    if (forceFlush || (now - lastConfigSaveMs >= 10000)) {
         if (storage.saveConfig(appState)) {
             lastConfigSaveMs = now;
             configSavePending = false;
-        } else {
-            // Save fail (thuong do SPI lock/SD busy) -> giu pending de retry.
-            configSavePending = true;
         }
-    } else {
-        configSavePending = true;
     }
 }
 
@@ -164,7 +164,20 @@ void AppLogic::handleEvents() {
                 ui_needs_update = false; 
             }
             else if (appState.currentMenu == MENU_NONE || appState.currentMenu == MENU_SET_SLEEP || appState.currentMenu == MENU_SET_BACKLIGHT) {
-                int step = (event == ENC_UP) ? 5 : -5; 
+                // Gia tốc: vặn nhanh hơn → bước nhảy lớn hơn
+                // Nếu hướng đảo chiều → encoder bounce phần cứng → reset accel về 1
+                const uint32_t now_enc = millis();
+                const uint32_t enc_interval = now_enc - lastEncEventTime;
+                const bool dirChanged = (lastEncDir != event);
+                lastEncEventTime = now_enc;
+                lastEncDir = event;
+                int accel = 1;
+                if (!dirChanged) {
+                    if      (enc_interval < 80)  accel = 6;
+                    else if (enc_interval < 150) accel = 4;
+                    else if (enc_interval < 300) accel = 2;
+                }
+                int step = (event == ENC_UP) ? (5 * accel) : -(5 * accel);
                 if (appState.currentMenu == MENU_SET_SLEEP) {
                     appState.sleepTimeout = constrain(appState.sleepTimeout + step, 30, 300);
                     encoder.setEncoderValue(appState.sleepTimeout); 
@@ -236,66 +249,66 @@ void AppLogic::handleEvents() {
                     case MENU_MAIN:
                         if (appState.menuIndex == 0) enterMenu(MENU_CONTROL);
                         else if (appState.menuIndex == 1) enterMenu(MENU_LAMP);
-                        else if (appState.menuIndex == 2) enterMenu(MENU_OTA); 
-                        else if (appState.menuIndex == 3) enterMenu(MENU_WEB_SERVER); 
                         else exitMenu(); 
                         break;
                     case MENU_CONTROL:
                         if (appState.menuIndex == 0) enterMenu(MENU_SET_SLEEP);
                         else if (appState.menuIndex == 1) enterMenu(MENU_SET_BACKLIGHT);
-                        else if (appState.menuIndex == 2) {
-                            WiFi.mode(WIFI_STA); WiFi.disconnect(false, true); 
+                        else if (appState.menuIndex == 2) enterMenu(MENU_OTA);
+                        else if (appState.menuIndex == 3) enterMenu(MENU_WEB_SERVER);
+                        else if (appState.menuIndex == 4) enterMenu(MENU_SELECT_BG); 
+                        else if (appState.menuIndex == 5) enterMenu(MENU_ABOUT);
+                        else if (appState.menuIndex == 6) {
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showFileContent("WIFI CLEARED", "WiFi deleted! Rebooting...");
+                                display.showFileContent("REMOTE", "Restarting...");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             storage.safeSync(appState);
-                            vTaskDelay(pdMS_TO_TICKS(2000)); ESP.restart(); 
+                            vTaskDelay(pdMS_TO_TICKS(250));
+                            ESP.restart();
                         }
-                        else if (appState.menuIndex == 3) enterMenu(MENU_SELECT_BG); 
-                        else if (appState.menuIndex == 4) enterMenu(MENU_ABOUT);
-                        else if (appState.menuIndex == 5) enterMenu(MENU_WIFI_SETUP);
                         else enterMenu(MENU_MAIN);
                         break;
                     case MENU_LAMP:
                         if (appState.menuIndex == 0) {
+                            bool ok = espNow.sendCommandWithAck('I', 2, 350);
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showFileContent("LAMP", ok ? "Identify command ACK." : "Identify ACK timeout.");
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            isViewingFile = true;
+                        } else if (appState.menuIndex == 1) {
+                            // Pair assistant: open commissioning window first, then show setup QR.
+                            bool ok = espNow.sendCommandWithAck('P', 2, 350);
+                            homeKitQrSynced = false;
+                            espNow.sendCommandWithAck('Q', 2, 350);
+                            vTaskDelay(pdMS_TO_TICKS(120));
+                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
+                                display.showHomeKitQr();
+                                xSemaphoreGiveRecursive(xGuiSemaphore);
+                            }
+                            if (!ok) {
+                                Serial.println("[APP] Pair: Open Pair ACK timeout, still showing QR");
+                            }
+                            isViewingFile = true;
+                        } else if (appState.menuIndex == 2) {
                             espNow.sendCommandWithAck('R', 0, 0);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent("LAMP", "Restart command sent.");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
-                        } else if (appState.menuIndex == 1) {
+                        } else if (appState.menuIndex == 3) {
                             bool ok = espNow.sendCommandWithAck('U', 2, 350);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent("LAMP", ok ? "Unpair command ACK." : "Unpair ACK timeout.");
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
-                        } else if (appState.menuIndex == 2) {
-                            bool ok = espNow.sendCommandWithAck('A', 2, 350);
-                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                if (ok) {
-                                    display.showApWifiQr();
-                                } else {
-                                    display.showFileContent("LAMP", "Turn On AP ACK timeout.");
-                                    isViewingFile = true;
-                                }
-                                xSemaphoreGiveRecursive(xGuiSemaphore);
-                            }
-                        } else if (appState.menuIndex == 3) {
+                        } else if (appState.menuIndex == 4) {
                             espNow.sendCommandWithAck('F', 0, 0);
                             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
                                 display.showFileContent("LAMP", "Factory reset command sent.");
-                                xSemaphoreGiveRecursive(xGuiSemaphore);
-                            }
-                            isViewingFile = true;
-                        } else if (appState.menuIndex == 4) {
-                            homeKitQrSynced = false;
-                            espNow.sendCommandWithAck('Q', 2, 350);
-                            vTaskDelay(pdMS_TO_TICKS(120));
-                            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                                display.showHomeKitQr();
                                 xSemaphoreGiveRecursive(xGuiSemaphore);
                             }
                             isViewingFile = true;
@@ -349,8 +362,8 @@ void AppLogic::handleEvents() {
         }
     }
 
-    if (configSavePending && (millis() - lastConfigSaveMs >= 1200)) {
-        requestConfigSave(true);
+    if (configSavePending && (millis() - lastConfigSaveMs >= 10000)) {
+        requestConfigSave(false);
     }
 
     if (pendingImageLoad && (millis() - lastScrollTime > 300)) {
@@ -392,14 +405,6 @@ void AppLogic::enterMenu(int level) {
     
     encoder.setEncoderValue(0);
     
-    if (level == MENU_WIFI_SETUP) {
-        originalSleepTimeout = appState.sleepTimeout;
-        appState.sleepTimeout = 999999;
-        webServer.runWiFiPortal();
-        isViewingFile = true;
-        return;
-    }
-
     if (level == MENU_OTA || level == MENU_WEB_SERVER) {
         originalSleepTimeout = appState.sleepTimeout;
         if (originalSleepTimeout > 300) originalSleepTimeout = 60; // Gác cổng
@@ -413,10 +418,10 @@ void AppLogic::enterMenu(int level) {
     }
     
     if (level == MENU_MAIN) {
-        encoder.setBoundaries(0, 4, true);         
+        encoder.setBoundaries(0, 2, true);         
     } 
     else if (level == MENU_CONTROL) {
-        encoder.setBoundaries(0, 6, true); 
+        encoder.setBoundaries(0, 7, true); 
     }
     else if (level == MENU_LAMP) {
         encoder.setBoundaries(0, 5, true);
@@ -465,14 +470,6 @@ void AppLogic::enterMenu(int level) {
 }
 
 void AppLogic::exitMenu() {
-    if (appState.currentMenu == MENU_WIFI_SETUP) {
-        appState.sleepTimeout = originalSleepTimeout;
-        webServer.isRunning = false;
-        if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
-                display.showFileContent(NULL, NULL);
-            xSemaphoreGiveRecursive(xGuiSemaphore);
-        }
-    }
     if (appState.currentMenu == MENU_OTA || appState.currentMenu == MENU_WEB_SERVER) {
         appState.sleepTimeout = originalSleepTimeout; 
         WiFi.disconnect(); WiFi.mode(WIFI_OFF); espNow.begin(); 

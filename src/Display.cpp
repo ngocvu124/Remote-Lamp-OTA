@@ -75,32 +75,67 @@ void DisplayLogic::bootPrint(const char* tag, const char* msg, bool ok) {
 
 // =============================================
 
-const char* mainMenuItems[] = {"1. Control Setting", "2. Lamp Setting", "3. OTA Update", "4. Web Server", "5. Exit"}; 
-const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. Reset WiFi", "4. Change BG", "5. About", "6. WiFi Setup", "7. Back"}; 
-const char* lampMenuItems[] = {"1. Restart", "2. Unpair", "3. Turn On AP", "4. Reset", "5. HomeKit QR", "6. Back"};
+const char* mainMenuItems[] = {"1. Control Setting", "2. Lamp Setting", "3. Exit"}; 
+const char* controlMenuItems[] = {"1. Sleep Time", "2. Backlight", "3. OTA Update", "4. Web Server", "5. Change BG", "6. About", "7. Restart Remote", "8. Back"}; 
+const char* lampMenuItems[] = {"1. Identify", "2. Pair (Open + QR)", "3. Restart", "4. Unpair", "5. Factory Reset", "6. Back"};
 
 static lv_obj_t *homekit_qr_overlay = NULL;
 static lv_obj_t *homekit_qr_obj = NULL;
 
-static void buildHomeKitQrPayload(char *payload, size_t payloadSize) {
-    if (payloadSize < 21) {
+// Build Matter QR code payload (MT: prefix, base38 encoded, 22 chars total)
+static void buildMatterQrPayload(char *payload, size_t payloadSize) {
+    if (payloadSize < 23) {
         if (payloadSize) payload[0] = '\0';
         return;
     }
 
-    const char *setupCodeStr = currentHomeKitSetupCode[0] ? currentHomeKitSetupCode : HOMEKIT_SETUP_CODE;
-    const char *qrIdStr = currentHomeKitQrId[0] ? currentHomeKitQrId : HOMEKIT_QR_ID;
-    uint32_t setupCode = atoi(setupCodeStr) & 0x07FFFFFF;
-    constexpr uint8_t homeKitIpProtocol = 2;
-    uint64_t encoded = ((uint64_t)HOMEKIT_CATEGORY << 31) | ((uint64_t)homeKitIpProtocol << 27) | setupCode;
-
-    strcpy(payload, "X-HM://");
-    for (int index = 15; index >= 7; --index) {
-        payload[index] = encoded % 36 + 48;
-        if (payload[index] > '9') payload[index] += 7;
-        encoded /= 36;
+    // Known-good Matter QR payload for default esp-matter test credentials:
+    // passcode=20202021, discriminator=3840, vid=0xFFF1, pid=0x8000
+    const char *passcodeStr = currentHomeKitSetupCode[0] ? currentHomeKitSetupCode : HOMEKIT_SETUP_CODE;
+    const char *discStr     = currentHomeKitQrId[0]      ? currentHomeKitQrId      : HOMEKIT_QR_ID;
+    if (strcmp(passcodeStr, "20202021") == 0 && strcmp(discStr, "3840") == 0) {
+        strncpy(payload, "MT:Y.K9042C00KA0648G00", payloadSize - 1);
+        payload[payloadSize - 1] = '\0';
+        return;
     }
-    snprintf(payload + 16, payloadSize - 16, "%-4.4s", qrIdStr);
+
+    static const char kBase38[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-.";
+
+    uint32_t passcode = (uint32_t)strtoul(passcodeStr, nullptr, 10);
+    uint16_t disc     = (uint16_t)atoi(discStr);
+    uint16_t vid      = 65521;   // 0xFFF1 test vendor
+    uint16_t pid      = 32768;   // 0x8000 test product
+    uint8_t  flow     = 0;       // standard commissioning
+    uint8_t  caps     = 4;       // BLE discovery
+
+    // Pack 88 bits into 11 bytes, LSB-first per Matter spec section 5.1.3
+    uint8_t b[11] = {};
+    auto setBits = [&](uint32_t start, uint32_t count, uint64_t val) {
+        for (uint32_t i = 0; i < count; i++)
+            if ((val >> i) & 1u)
+                b[(start + i) / 8] |= (uint8_t)(1u << ((start + i) & 7u));
+    };
+    setBits(0,  3,  0ULL);
+    setBits(3,  16, (uint64_t)vid);
+    setBits(19, 16, (uint64_t)pid);
+    setBits(35, 2,  (uint64_t)flow);
+    setBits(37, 8,  (uint64_t)caps);
+    setBits(45, 12, (uint64_t)disc);
+    setBits(57, 27, (uint64_t)passcode);
+    // bits 84-87: padding = 0 (already zero-initialized)
+
+    // Base38 encode: 3+3+3+2 bytes → 5+5+5+4 = 19 chars, prefix "MT:" = 22 total
+    strcpy(payload, "MT:");
+    int pos = 3;
+    for (int i = 0; i < 9; i += 3) {
+        uint32_t v = (uint32_t)b[i] | ((uint32_t)b[i+1] << 8) | ((uint32_t)b[i+2] << 16);
+        for (int k = 0; k < 5; k++) { payload[pos++] = kBase38[v % 38]; v /= 38; }
+    }
+    {
+        uint32_t v = (uint32_t)b[9] | ((uint32_t)b[10] << 8);
+        for (int k = 0; k < 4; k++) { payload[pos++] = kBase38[v % 38]; v /= 38; }
+    }
+    payload[pos] = '\0';
 }
 
 void DisplayLogic::my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -400,10 +435,10 @@ void DisplayLogic::updateUI(RemoteState &state) {
 
         if (state.currentMenu != lastMenuType) {
             if (state.currentMenu == MENU_MAIN) {
-                lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 5); 
+                lv_label_set_text(objects.label_menu, "Main Menu"); buildMenu(mainMenuItems, 3); 
             } 
             else if (state.currentMenu == MENU_CONTROL) {
-                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 7); 
+                lv_label_set_text(objects.label_menu, "Control Setup"); buildMenu(controlMenuItems, 8); 
             }
             else if (state.currentMenu == MENU_LAMP) {
                 lv_label_set_text(objects.label_menu, "Lamp Setup"); buildMenu(lampMenuItems, 6);
@@ -457,8 +492,8 @@ void DisplayLogic::turnOn() {
 void DisplayLogic::showHomeKitQr() {
     closeHomeKitQr();
 
-    char payload[21] = {0};
-    buildHomeKitQrPayload(payload, sizeof(payload));
+    char payload[23] = {0};
+    buildMatterQrPayload(payload, sizeof(payload));
 
     homekit_qr_overlay = lv_obj_create(lv_scr_act());
     lv_obj_set_size(homekit_qr_overlay, 230, 230);
@@ -470,7 +505,7 @@ void DisplayLogic::showHomeKitQr() {
     lv_obj_set_style_pad_all(homekit_qr_overlay, 10, 0);
 
     lv_obj_t *title = lv_label_create(homekit_qr_overlay);
-    lv_label_set_text(title, "HomeKit Setup QR");
+    lv_label_set_text(title, "Matter Setup QR");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);
 
     homekit_qr_obj = lv_qrcode_create(homekit_qr_overlay, 140, lv_color_black(), lv_color_white());
@@ -479,11 +514,11 @@ void DisplayLogic::showHomeKitQr() {
 
     const char *setupCodeStr = currentHomeKitSetupCode[0] ? currentHomeKitSetupCode : HOMEKIT_SETUP_CODE;
     lv_obj_t *code = lv_label_create(homekit_qr_overlay);
-    lv_label_set_text_fmt(code, "Code: %.3s-%.2s-%.3s", setupCodeStr, setupCodeStr + 3, setupCodeStr + 5);
+    lv_label_set_text_fmt(code, "Code: %.4s-%.4s", setupCodeStr, setupCodeStr + 4);
     lv_obj_align(code, LV_ALIGN_BOTTOM_MID, 0, -18);
 
     lv_obj_t *hint = lv_label_create(homekit_qr_overlay);
-    lv_label_set_text(hint, homeKitQrSynced ? "Synced from lamp" : "Using fallback code");
+    lv_label_set_text(hint, homeKitQrSynced ? "Synced from lamp" : "Default code");
     lv_obj_set_style_text_color(hint, lv_palette_lighten(LV_PALETTE_GREY, 2), 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, 0);
 }
