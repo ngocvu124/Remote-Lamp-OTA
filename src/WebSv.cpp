@@ -147,7 +147,35 @@ static void webTask(void* pvParameters) {
     WebServer* server = new WebServer(80);
     static FsFile uploadFile; 
 
+    // Serve static style.css
+    server->on("/style.css", HTTP_GET, [server]() {
+        File file = LittleFS.open("/style.css", "r");
+        if (!file) { server->send(404, "text/plain", "Missing style.css"); return; }
+        server->streamFile(file, "text/css");
+        file.close();
+    });
+    // Serve static main.js
+    server->on("/main.js", HTTP_GET, [server]() {
+        File file = LittleFS.open("/main.js", "r");
+        if (!file) { server->send(404, "text/plain", "Missing main.js"); return; }
+        server->streamFile(file, "application/javascript");
+        file.close();
+    });
     if (mode == WEB_MODE_UPLOAD) {
+        // Serve static style.css
+        server->on("/style.css", HTTP_GET, [server]() {
+            File file = LittleFS.open("/style.css", "r");
+            if (!file) { server->send(404, "text/plain", "Missing style.css"); return; }
+            server->streamFile(file, "text/css");
+            file.close();
+        });
+        // Serve static main.js
+        server->on("/main.js", HTTP_GET, [server]() {
+            File file = LittleFS.open("/main.js", "r");
+            if (!file) { server->send(404, "text/plain", "Missing main.js"); return; }
+            server->streamFile(file, "application/javascript");
+            file.close();
+        });
         
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/home.html", "r");

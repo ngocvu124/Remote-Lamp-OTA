@@ -1,0 +1,48 @@
+/* ======= Shared CSS for Remote Lamp Web ======= */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
+.sidebar { width: 260px; background-color: #1e293b; display: flex; flex-direction: column; border-right: 1px solid #334155; }
+.sidebar-header { padding: 25px 20px; font-size: 1.5rem; font-weight: 800; color: #f97316; border-bottom: 1px solid #334155; text-align: center; letter-spacing: 1px; }
+.nav-menu { flex: 1; padding: 20px 15px; display: flex; flex-direction: column; gap: 12px; }
+.nav-link { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #cbd5e1; text-decoration: none; border-radius: 12px; transition: all 0.3s ease; font-weight: 500; font-size: 15px; }
+.nav-link:hover, .nav-link.active { background-color: #f97316; color: #fff; transform: translateX(5px); }
+.github-link { margin-top: auto; background-color: #0f172a; border: 1px solid #334155; color: #38bdf8; }
+.github-link:hover { background-color: #38bdf8; color: #0f172a; }
+.main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+.header { background-color: #1e293b; padding: 20px 30px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+.header h2 { font-size: 1.4rem; font-weight: 700; color: #e2e8f0; }
+#status { font-weight: 600; padding: 8px 20px; border-radius: 20px; background: rgba(16, 185, 129, 0.1); color: #10b981; font-size: 15px; border: 2px solid #10b981; box-shadow: 0 2px 8px rgba(16,185,129,0.08); margin-left: 20px; }
+.content { padding: 30px; max-width: 900px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; align-items: center; }
+.upload-card { background: #1e293b; border: 1.5px dashed #475569; padding: 30px; border-radius: 16px; width: 100%; text-align: center; margin-bottom: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); transition: box-shadow 0.2s; }
+.upload-card:hover { box-shadow: 0 16px 32px -8px #f97316a0; }
+.upload-label { display: inline-block; background: #f97316; color: white; padding: 12px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; margin-bottom: 10px; }
+.upload-label:hover { background: #ea580c; transform: translateY(-2px); }
+input[type="file"] { display: none; }
+.canvas-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; width: 100%; }
+.canvas-box { display: flex; flex-direction: column; align-items: center; }
+.label-tag { font-size: 13px; margin-bottom: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+canvas { border: 4px solid #334155; border-radius: 12px; max-width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); background: #0f172a; }
+.button-group { display: flex; justify-content: center; gap: 15px; margin-top: 40px; width: 100%; flex-wrap: wrap; }
+.btn { border: none; padding: 14px 24px; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 8px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+.btn-upload { background: #f97316; color: #fff; box-shadow: 0 4px 10px rgba(249,115,22,0.3); }
+.btn-upload:hover:not(:disabled) { background: #ea580c; transform: translateY(-2px); }
+.btn-download { background: #1e293b; color: #10b981; border: 2px solid #10b981; }
+.btn-download:hover:not(:disabled) { background: #10b981; color: #1e293b; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.file-card { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 15px; display: flex; align-items: center; justify-content: space-between; transition: transform 0.2s, box-shadow 0.2s; }
+.file-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); border-color: #f97316; }
+.file-info { display: flex; align-items: center; gap: 15px; overflow: hidden; cursor: pointer; flex: 1; }
+.file-icon { font-size: 2.2rem; }
+.file-details { display: flex; flex-direction: column; overflow: hidden; }
+.file-name { font-weight: 600; font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f1f5f9; }
+.file-size { font-size: 0.85rem; color: #94a3b8; margin-top: 3px; }
+.file-actions { display: flex; gap: 8px; margin-left: 10px; }
+.icon-btn { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #ef4444; font-size: 1.2rem; cursor: pointer; transition: all 0.2s; padding: 8px; display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.icon-btn:hover { background: #ef4444; color: white; }
+.icon-btn.dl { color: #38bdf8; background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.2); }
+.icon-btn.dl:hover { background: #38bdf8; color: white; }
+#status { padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; text-align: center; border: 1px solid transparent; }
+.footer { padding: 20px; text-align: center; color: #64748b; font-size: 0.85rem; border-top: 1px solid #334155; margin-top: auto; }
+@media (max-width: 900px) { .content { padding: 10px; } .canvas-container { gap: 20px; } }
+@media (max-width: 768px) { body { flex-direction: column; } .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #334155; } .nav-menu { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 10px; gap: 8px;} .nav-link { padding: 10px 15px; font-size: 13px; } .content { padding: 10px; } .canvas-container { gap: 10px; } .header { flex-direction: column; align-items: flex-start; gap: 10px; } #status { margin-left: 0; margin-top: 10px; } }
