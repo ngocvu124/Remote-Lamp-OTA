@@ -571,7 +571,7 @@ void DisplayLogic::updateUI(RemoteState &state) {
 }
 
 void DisplayLogic::setContrast(int level) {
-    level = constrain(level, 0, 100);
+    level = constrain(level, 5, 100);
     ledcWrite(BACKLIGHT_CHANNEL, map(level, 0, 100, 0, 255));
 }
 void DisplayLogic::turnOff() {
