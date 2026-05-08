@@ -1,5 +1,3 @@
-#include <WebServer.h>
-class WebServer;
 #ifndef WEBSV_H
 #define WEBSV_H
 
@@ -12,7 +10,7 @@ enum WebServerMode {
 
 class WebServerLogic {
 public:
-    void begin(WebServer* server);
+    void begin();
     bool runWiFiSetup(); 
     void runBgUpload();  
     

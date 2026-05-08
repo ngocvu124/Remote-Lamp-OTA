@@ -79,8 +79,7 @@ void appTask(void *pvParameters) {
         xSemaphoreGiveRecursive(xGuiSemaphore);
     }
 
-    WebServer* server = new WebServer(80);
-    webServer.begin(server);
+    webServer.begin();
     app.begin();
 
     while (1) {

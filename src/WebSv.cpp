@@ -133,27 +133,7 @@ static bool deleteRecursive(const String& path) {
 }
 // ---------------------------------------------------
 
-void WebServerLogic::begin(WebServer* server) {
-
-        // API trả về dung lượng SD
-        server->on("/storage_info", HTTP_GET, [server]() {
-            if (!storage.isReady || !sd_bg.card()) {
-                server->send(200, "application/json", "{\"total\":0,\"used\":0,\"free\":0}");
-                return;
-            }
-            uint64_t total = 0, used = 0;
-            total = sd_bg.card()->sectorCount() * 512ULL;
-            FsVolume* vol = sd_bg.vol();
-            if (vol) {
-                uint32_t clusters = vol->clusterCount();
-                uint32_t freeClusters = vol->freeClusterCount();
-                uint32_t sectorsPerCluster = vol->sectorsPerCluster();
-                used = (clusters - freeClusters) * sectorsPerCluster * 512ULL;
-            }
-            char buf[128];
-            snprintf(buf, sizeof(buf), "{\"total\":%llu,\"used\":%llu,\"free\":%llu}", total, used, total > used ? total - used : 0);
-            server->send(200, "application/json", buf);
-        });
+void WebServerLogic::begin() {
     if (!LittleFS.begin(true)) {
         Serial.println("[WEB] LittleFS Mount Failed!");
     } else {
@@ -165,8 +145,6 @@ void WebServerLogic::begin(WebServer* server) {
 static void webTask(void* pvParameters) {
     WebServerMode mode = (WebServerMode)(intptr_t)pvParameters;
     WebServer* server = new WebServer(80);
-    webServer.begin(server);
-    server->begin();
     static FsFile uploadFile; 
 
     // Serve static style.css
@@ -198,7 +176,7 @@ static void webTask(void* pvParameters) {
             server->streamFile(file, "application/javascript");
             file.close();
         });
-    
+        
         server->on("/", HTTP_GET, [server]() {
             File file = LittleFS.open("/home.html", "r");
             if (!file) { server->send(500, "text/plain", "Missing home.html"); return; }
