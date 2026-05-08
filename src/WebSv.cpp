@@ -166,6 +166,7 @@ static void webTask(void* pvParameters) {
     WebServerMode mode = (WebServerMode)(intptr_t)pvParameters;
     WebServer* server = new WebServer(80);
     webServer.begin(server);
+    server->begin();
     static FsFile uploadFile; 
 
     // Serve static style.css
