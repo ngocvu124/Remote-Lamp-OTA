@@ -1,6 +1,31 @@
 // ======= Trang files.html =======
 window.addEventListener('DOMContentLoaded', () => {
     if (!document.getElementById('fileList')) return; // Chỉ chạy trên files.html
+
+    // Hiển thị dung lượng bộ nhớ SD
+    function updateStorageBar() {
+        const bar = document.getElementById('storageBar');
+        const text = document.getElementById('storageText');
+        if (!bar || !text) return;
+        text.innerText = 'Đang tải...';
+        bar.style.width = '0%';
+        fetch('/storage_info').then(async r => {
+            if (!r.ok) throw new Error(await r.text() || 'HTTP ' + r.status);
+            return r.json();
+        }).then(data => {
+            const total = data.total || 0, used = data.used || 0, free = data.free || 0;
+            const percent = total > 0 ? Math.round(used * 100 / total) : 0;
+            bar.style.width = percent + '%';
+            text.innerText = `Đã dùng: ${formatSize(used)} / ${formatSize(total)} (${percent}%) | Còn trống: ${formatSize(free)}`;
+            bar.style.background = percent > 90 ? '#ef4444' : (percent > 70 ? '#f59e0b' : '#38bdf8');
+        }).catch(e => {
+            text.innerText = 'Không đọc được thẻ nhớ!';
+            bar.style.width = '0%';
+            bar.style.background = '#ef4444';
+        });
+    }
+    updateStorageBar();
+    setInterval(updateStorageBar, 10000);
     let currentDir = "/";
 
     function updateBreadcrumb() {
@@ -105,8 +130,18 @@ window.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('fileInput'), canvas = document.getElementById('canvas'), ctx = canvas?.getContext?.('2d'),
         binPreview = document.getElementById('binPreview'), btx = binPreview?.getContext?.('2d'), 
-        uploadBtn = document.getElementById('uploadBtn'), dlLocalBtn = document.getElementById('dlLocalBtn');
-    if (!fileInput || !canvas || !ctx || !binPreview || !btx || !uploadBtn || !dlLocalBtn) return;
+        uploadBtn = document.getElementById('uploadBtn'), dlLocalBtn = document.getElementById('dlLocalBtn'),
+        refreshBtn = document.getElementById('refreshBtn'),
+        errorMsg = document.getElementById('errorMsg'),
+        binSizeInfo = document.getElementById('binSizeInfo'),
+        originalImg = document.getElementById('originalImg');
+    // Text ký
+    const signText = document.getElementById('signText'), signColor = document.getElementById('signColor');
+    let sign = { text: '', color: '#38bdf8', x: 120, y: 220, dragging: false, offsetX: 0, offsetY: 0 };
+    // Cropper popup
+    const cropModal = document.getElementById('cropModal'), cropperImg = document.getElementById('cropperImg'), cropOkBtn = document.getElementById('cropOkBtn'), cropCancelBtn = document.getElementById('cropCancelBtn');
+    let cropper = null, cropSrc = null;
+    if (!fileInput || !canvas || !ctx || !binPreview || !btx || !uploadBtn || !dlLocalBtn || !refreshBtn || !errorMsg || !binSizeInfo || !originalImg || !cropModal || !cropperImg || !cropOkBtn || !cropCancelBtn) return;
     let rgb565Data = null;
 
     function getFileName() {
@@ -116,32 +151,186 @@ window.addEventListener('DOMContentLoaded', () => {
         return fName + '.bin';
     }
 
+    function resetForm() {
+            sign.text = '';
+            sign.x = 120;
+            sign.y = 220;
+            sign.color = '#38bdf8';
+            if(signText) signText.value = '';
+            if(signColor) signColor.value = '#38bdf8';
+            // Xử lý nhập text/chữ ký
+            if(signText) signText.oninput = function() {
+                sign.text = this.value;
+                redrawCanvasWithSign();
+            };
+            if(signColor) signColor.oninput = function() {
+                sign.color = this.value;
+                redrawCanvasWithSign();
+            };
+
+            // Kéo/thả chữ ký trên canvas
+            let dragging = false;
+            if(canvas) {
+                canvas.addEventListener('mousedown', function(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+                    ctx.font = 'bold 22px sans-serif';
+                    const w = ctx.measureText(sign.text).width, h = 24;
+                    if(sign.text && mx > sign.x-w/2-8 && mx < sign.x+w/2+8 && my > sign.y-h && my < sign.y+8) {
+                        dragging = true;
+                        sign.dragging = true;
+                        sign.offsetX = mx - sign.x;
+                        sign.offsetY = my - sign.y;
+                    }
+                });
+                canvas.addEventListener('mousemove', function(e) {
+                    if(!dragging) return;
+                    const rect = canvas.getBoundingClientRect();
+                    sign.x = e.clientX - rect.left - sign.offsetX;
+                    sign.y = e.clientY - rect.top - sign.offsetY;
+                    redrawCanvasWithSign();
+                });
+                canvas.addEventListener('mouseup', function() { dragging = false; sign.dragging = false; });
+                canvas.addEventListener('mouseleave', function() { dragging = false; sign.dragging = false; });
+            }
+        fileInput.value = "";
+        document.getElementById('fileNameInput').value = "bg1";
+        ctx.clearRect(0, 0, 240, 240);
+        btx.clearRect(0, 0, 240, 240);
+        rgb565Data = null;
+        uploadBtn.disabled = dlLocalBtn.disabled = true;
+        errorMsg.style.display = 'none';
+        binSizeInfo.style.display = 'none';
+        originalImg.style.display = 'none';
+        setStatus('Sẵn sàng', '#10b981', 'rgba(16, 185, 129, 0.1)');
+    }
+    refreshBtn.onclick = resetForm;
+
     fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0]; if (!file) return;
+        errorMsg.style.display = 'none';
+        binSizeInfo.style.display = 'none';
+        originalImg.style.display = 'none';
+        const file = e.target.files[0]; 
+        if (!file) return;
+        
+        if (!file.type.match(/^image\/(jpeg|png)$/)) {
+            errorMsg.innerText = 'Chỉ hỗ trợ ảnh JPG hoặc PNG!';
+            errorMsg.style.display = 'block';
+            return;
+        }
+        if (file.size > 20*1024*1024) {
+            errorMsg.innerText = 'Ảnh quá lớn!';
+            errorMsg.style.display = 'block';
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = function(event) {
-            const img = new Image();
-            img.onload = function() {
-                const size = Math.min(img.width, img.height), sx = (img.width - size) / 2, sy = (img.height - size) / 2;
-                ctx.clearRect(0, 0, 240, 240);
-                ctx.drawImage(img, sx, sy, size, size, 0, 0, 240, 240);
-                const imgData = ctx.getImageData(0, 0, 240, 240).data;
-                rgb565Data = new Uint8Array(240 * 240 * 2);
-                let j = 0;
-                for (let i = 0; i < imgData.length; i += 4) {
-                    const r = imgData[i] >> 3, g = imgData[i+1] >> 2, b = imgData[i+2] >> 3;
-                    const rgb565 = (r << 11) | (g << 5) | b;
-                    rgb565Data[j++] = rgb565 & 0xFF;        
-                    rgb565Data[j++] = (rgb565 >> 8) & 0xFF; 
+            cropSrc = event.target.result;
+            
+            // 1. Gán source cho ảnh
+            cropperImg.src = cropSrc;
+            
+            // 2. Mở popup lên trước để thẻ img có kích thước thực tế
+            cropModal.style.display = 'flex';
+            
+            // 3. Xóa cái hướng dẫn cũ đi cho gọn
+            const guide = document.getElementById('cropperGuide');
+            if (guide) guide.innerHTML = '';
+
+            // 4. CHỜ ẢNH LOAD XONG TRÊN DOM MỚI GỌI CROPPER
+            cropperImg.onload = function() {
+                if (cropper) { 
+                    cropper.destroy(); 
+                    cropper = null; 
                 }
-                renderPreview();
-                uploadBtn.disabled = dlLocalBtn.disabled = false;
-                setStatus('Đã xử lý ảnh thành công!', '#10b981', 'rgba(16, 185, 129, 0.1)');
+                cropper = new Cropper(cropperImg, {
+                    aspectRatio: 1,
+                    viewMode: 1,
+                    autoCropArea: 1,
+                    background: false,
+                    movable: true,
+                    zoomable: true,
+                    scalable: false,
+                    rotatable: false,
+                    responsive: true,
+                    minCropBoxWidth: 240,
+                    minCropBoxHeight: 240,
+                    cropBoxResizable: true,
+                    cropBoxMovable: true,
+                    ready() {
+                        // Căn giữa khung crop 240x240
+                        const imgData = cropper.getImageData();
+                        const left = (imgData.naturalWidth - 240) / 2;
+                        const top = (imgData.naturalHeight - 240) / 2;
+                        cropper.setCropBoxData({ width: 240, height: 240, left: left, top: top });
+                    }
+                });
             };
-            img.src = event.target.result;
         };
         reader.readAsDataURL(file);
     });
+
+    cropOkBtn.onclick = function() {
+        if (!cropper) return;
+        // Lấy vùng crop, vẽ lên canvas
+        const cropData = cropper.getData(true);
+        const img = new Image();
+        img.onload = function() {
+            ctx.clearRect(0, 0, 240, 240);
+            ctx.drawImage(img, cropData.x, cropData.y, cropData.width, cropData.height, 0, 0, 240, 240);
+            redrawCanvasWithSign();
+            // Hiện preview ảnh gốc đã crop
+            originalImg.src = canvas.toDataURL('image/png');
+            originalImg.style.display = 'block';
+            // Chuyển sang RGB565
+            const imgData = ctx.getImageData(0, 0, 240, 240).data;
+            rgb565Data = new Uint8Array(240 * 240 * 2);
+            let j = 0;
+            for (let i = 0; i < imgData.length; i += 4) {
+                const r = imgData[i] >> 3, g = imgData[i+1] >> 2, b = imgData[i+2] >> 3;
+                const rgb565 = (r << 11) | (g << 5) | b;
+                rgb565Data[j++] = rgb565 & 0xFF;
+                rgb565Data[j++] = (rgb565 >> 8) & 0xFF;
+            }
+            renderPreview();
+            uploadBtn.disabled = dlLocalBtn.disabled = false;
+            setStatus('Đã xử lý ảnh thành công!', '#10b981', 'rgba(16, 185, 129, 0.1)');
+            binSizeInfo.innerText = `Kích thước file .bin: ${(rgb565Data.length/1024).toFixed(1)} KB`;
+            binSizeInfo.style.display = 'block';
+            cropModal.style.display = 'none';
+            cropper.destroy(); cropper = null;
+        };
+        img.src = cropSrc;
+        // Vẽ lại canvas với chữ ký
+        function redrawCanvasWithSign() {
+            // Lấy ảnh gốc trên canvas
+            const imgData = ctx.getImageData(0, 0, 240, 240);
+            ctx.clearRect(0, 0, 240, 240);
+            ctx.putImageData(imgData, 0, 0);
+            if(sign.text) {
+                ctx.save();
+                ctx.font = 'bold 22px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.strokeStyle = '#000a';
+                ctx.lineWidth = 4;
+                ctx.strokeText(sign.text, sign.x, sign.y);
+                ctx.fillStyle = sign.color;
+                ctx.fillText(sign.text, sign.x, sign.y);
+                ctx.restore();
+            }
+        }
+    };
+    cropCancelBtn.onclick = function() {
+        cropModal.style.display = 'none';
+        if (cropper) { 
+            cropper.destroy(); 
+            cropper = null; 
+        }
+        cropperImg.src = ""; // Thêm dòng này để dọn dẹp
+        fileInput.value = "";
+    };
 
     function renderPreview() {
         const imgData = btx.createImageData(240, 240);
@@ -157,18 +346,57 @@ window.addEventListener('DOMContentLoaded', () => {
         btx.putImageData(imgData, 0, 0);
     }
 
+    dlLocalBtn.title = "Tải file .bin về máy tính";
+    uploadBtn.title = "Tải file .bin lên ESP32";
+
     dlLocalBtn.onclick = () => {
+        if (!rgb565Data) return;
         const blob = new Blob([rgb565Data], { type: 'application/octet-stream' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = getFileName(); a.click();
     };
 
     uploadBtn.onclick = () => {
-        uploadBtn.disabled = true; 
+        if (!rgb565Data) return;
+        uploadBtn.disabled = true;
         let finalName = getFileName();
         setStatus('Đang tải ' + finalName + ' lên...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
-        const formData = new FormData(); 
+        // Hiện thanh tiến trình
+        const progressWrap = document.getElementById('uploadProgressWrap');
+        const progressBar = document.getElementById('uploadProgressBar');
+        const progressText = document.getElementById('uploadProgressText');
+        if(progressWrap) progressWrap.style.display = 'block';
+        if(progressBar) progressBar.style.width = '0%';
+        if(progressText) progressText.innerText = '0%';
+
+        const formData = new FormData();
         formData.append('bg', new Blob([rgb565Data], { type: 'application/octet-stream' }), finalName);
-        fetch('/upload', { method: 'POST', body: formData }).then(res => res.ok ? location.reload() : alert('Lỗi tải lên!'));
+        // Dùng XMLHttpRequest để theo dõi tiến trình
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload', true);
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                const percent = Math.round(e.loaded * 100 / e.total);
+                if(progressBar) progressBar.style.width = percent + '%';
+                if(progressText) progressText.innerText = percent + '%';
+            }
+        };
+        xhr.onload = function() {
+            if(progressBar) progressBar.style.width = '100%';
+            if(progressText) progressText.innerText = '100%';
+            setTimeout(() => { if(progressWrap) progressWrap.style.display = 'none'; }, 600);
+            if (xhr.status === 200) {
+                location.reload();
+            } else {
+                alert('Lỗi tải lên!');
+                uploadBtn.disabled = false;
+            }
+        };
+        xhr.onerror = function() {
+            if(progressWrap) progressWrap.style.display = 'none';
+            alert('Lỗi kết nối khi upload!');
+            uploadBtn.disabled = false;
+        };
+        xhr.send(formData);
     };
 });
 // ======= Shared JS for Remote Lamp Web =======

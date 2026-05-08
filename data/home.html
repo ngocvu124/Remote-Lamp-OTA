@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard | Remote Lamp</title>
     <link rel="stylesheet" href="/style.css">
+    <!-- Cropper.js từ CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" />
+
 </head>
 <body>
     <aside class="sidebar">
@@ -24,29 +27,58 @@
         
         <div class="content">
             <div class="upload-card">
-                <label class="upload-label">
+                <div style="margin-bottom: 12px; color: #f1f5f9; font-size: 15px; text-align: center;">
+                    <b>Hướng dẫn:</b> Chọn ảnh vuông (JPG/PNG), hệ thống sẽ crop và chuyển thành file .bin 240x240 cho ESP32.<br>
+                    Sau khi xử lý, bạn có thể xem trước, tải về hoặc tải lên thiết bị.<br>
+                    <span style="color:#38bdf8; font-size:13px;">(Tên file sẽ hiện trong menu Change BG trên màn hình)</span>
+                </div>
+                <label class="upload-label" title="Chọn ảnh JPG/PNG từ máy tính">
                     <input type="file" id="fileInput" accept="image/jpeg, image/png">
                     📸 CHỌN ẢNH TỪ MÁY
                 </label>
-                
+                <button id="refreshBtn" class="btn btn-secondary" style="margin-left:10px;" title="Làm mới form">🔄 Làm mới</button>
+                <div id="errorMsg" style="color:#ef4444; font-size:14px; margin:10px 0 0 0; display:none;"></div>
                 <div style="margin-top: 25px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                     <label style="color: #cbd5e1; font-weight: bold; font-size: 14px;">Lưu file trên thẻ nhớ với tên:</label>
                     <div style="display: flex; justify-content: center; align-items: center; margin-top: 10px;">
                         <input type="text" id="fileNameInput" value="bg1" placeholder="vd: bg1" style="width: 150px; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; text-align: center; font-size: 15px; outline: none; font-weight: bold;">
                         <span style="color: #94a3b8; margin-left: 10px; font-weight: bold;">.bin</span>
                     </div>
-                    <p style="font-size: 12px; color: #64748b; margin-top: 10px;">(Tên này sẽ hiện trong Menu Change BG trên màn hình ESP32)</p>
                 </div>
+                <div id="binSizeInfo" style="color:#38bdf8; font-size:13px; margin-top:8px; display:none;"></div>
             </div>
 
-            <div class="canvas-container">
+
+            <div class="sign-box" style="display:flex;align-items:center;gap:10px;margin:18px 0 10px 0;justify-content:center;">
+                <input id="signText" type="text" maxlength="32" placeholder="Nhập chữ ký/text lên ảnh..." style="width:180px;padding:8px 10px;border-radius:6px;border:1px solid #475569;background:#0f172a;color:#fff;font-size:15px;outline:none;">
+                <input id="signColor" type="color" value="#38bdf8" title="Chọn màu chữ ký" style="width:36px;height:36px;border:none;background:none;">
+                <span style="color:#94a3b8;font-size:13px;">(Kéo chữ ký trên ảnh)</span>
+            </div>
                 <div class="canvas-box">
-                    <span class="label-tag">1. Ảnh Gốc Đã Crop</span>
+                    <span class="label-tag">1. Ảnh Gốc</span>
+                    <img id="originalImg" src="" alt="Ảnh gốc" style="max-width:240px; max-height:240px; border-radius:10px; border:2px solid #334155; background:#222; display:none; margin-bottom:8px;">
+                    <span class="label-tag">2. Ảnh Đã Crop</span>
                     <canvas id="canvas" width="240" height="240"></canvas>
                 </div>
                 <div class="canvas-box">
-                    <span class="label-tag">2. Bản Xem Trước</span>
+                    <span class="label-tag">3. Bản Xem Trước (RGB565)</span>
                     <canvas id="binPreview" width="240" height="240"></canvas>
+                </div>
+            </div>
+
+            <!-- Popup crop ảnh -->
+            <div id="cropModal" style="display:none;position:fixed;z-index:1000;left:0;top:0;width:100vw;height:100vh;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+                <div style="background:#222;padding:24px 18px 18px 18px;border-radius:12px;box-shadow:0 8px 32px #000a;max-width:95vw;max-height:95vh;display:flex;flex-direction:column;align-items:center;">
+                    <div style="font-weight:bold;color:#38bdf8;margin-bottom:10px;">Cắt ảnh theo ý muốn</div>
+                    <div style="color:#fbbf24;font-size:13px;margin-bottom:8px;">Kéo/thu nhỏ vùng crop (ô vuông sáng) rồi nhấn "Cắt & Dùng ảnh này"</div>
+                    <div style="position:relative;">
+                        <img id="cropperImg" src="" style="max-width:70vw;max-height:60vh;background:#111;border-radius:8px;border:2px solid #334155;">
+                        <div id="cropperGuide" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></div>
+                    </div>
+                    <div style="margin-top:16px;display:flex;gap:12px;">
+                        <button id="cropOkBtn" class="btn btn-upload">✅ Cắt & Dùng ảnh này</button>
+                        <button id="cropCancelBtn" class="btn btn-secondary">❌ Huỷ</button>
+                    </div>
                 </div>
             </div>
 
@@ -54,11 +86,19 @@
                 <button id="uploadBtn" class="btn btn-upload" disabled>🚀 TẢI LÊN ESP32</button>
                 <button id="dlLocalBtn" class="btn btn-download" disabled>📥 LƯU BIN VỀ PC</button>
             </div>
+            <div id="uploadProgressWrap" style="width:100%;max-width:340px;margin:18px auto 0 auto;display:none;">
+                <div style="background:#222;border-radius:8px;border:1px solid #334155;overflow:hidden;height:22px;">
+                    <div id="uploadProgressBar" style="height:100%;width:0%;background:#38bdf8;transition:width 0.2s;"></div>
+                </div>
+                <div id="uploadProgressText" style="text-align:center;color:#38bdf8;font-size:14px;margin-top:4px;">0%</div>
+            </div>
         </div>
 
         <footer class="footer">&copy; 2026 Remote Lamp Project by Vũ. All rights reserved.</footer>
     </main>
 
+    <!-- Cropper.js từ CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script src="/main.js"></script>
 </body>
 </html>
