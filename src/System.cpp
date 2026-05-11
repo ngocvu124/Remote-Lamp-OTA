@@ -16,17 +16,30 @@ RTC_DATA_ATTR int savedOledBrightness = 50;
 
 void SystemLogic::begin() {
     Serial.begin(115200);
-    gpio_hold_dis((gpio_num_t)SCR_BLK_PIN); 
+    
+    // 1. Tắt khóa tổng Deep Sleep
     gpio_deep_sleep_hold_dis();
 
-    // Log wake reason de phan biet wake bang nut hay reset USB.
+    // 2. MỞ KHÓA CHO TẤT CẢ CÁC CHÂN ĐÃ BỊ "ĐÓNG BĂNG" LÚC NGỦ
+    gpio_hold_dis((gpio_num_t)SCR_BLK_PIN); 
+    gpio_hold_dis((gpio_num_t)SD_CS_PIN);
+    gpio_hold_dis((gpio_num_t)SPI_SCK_PIN);
+    gpio_hold_dis((gpio_num_t)SPI_MOSI_PIN);
+    gpio_hold_dis((gpio_num_t)SPI_MISO_PIN);
+    gpio_hold_dis((gpio_num_t)TFT_CS);
+    gpio_hold_dis((gpio_num_t)TFT_DC);
+    gpio_hold_dis((gpio_num_t)TFT_RST);
+
+    // Log wake reason
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     Serial.printf("[SYS] Wake cause: %d\n", (int)cause);
+    
     if (cause == ESP_SLEEP_WAKEUP_EXT1 || cause == ESP_SLEEP_WAKEUP_EXT0) {
         rtc_gpio_hold_dis((gpio_num_t)ROTARY_BTN_PIN);
         rtc_gpio_deinit((gpio_num_t)ROTARY_BTN_PIN); // Tra ve digital GPIO mode
         rtc_gpio_hold_dis((gpio_num_t)WAKE_AUX_PIN);
         rtc_gpio_deinit((gpio_num_t)WAKE_AUX_PIN);
+        
         appState.brightness = savedBrightness;
         appState.oledBrightness = savedOledBrightness;
         uint64_t wakeMask = esp_sleep_get_ext1_wakeup_status();
