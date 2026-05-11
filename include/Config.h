@@ -7,8 +7,8 @@
 #include <freertos/queue.h>
 
 // --- CẤU HÌNH THÔNG TIN OTA ---
-#define FIRMWARE_VERSION "v1.6.2.8"
-#define FIRMWARE_NAME "Last version"
+#define FIRMWARE_VERSION "v1.6.2.9"
+#define FIRMWARE_NAME "Sleep"
 
 // --- CẤU HÌNH WIFI
 extern char cachedSSID[32];

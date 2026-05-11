@@ -38,36 +38,58 @@ void SystemLogic::goToSleep() {
     savedBrightness = appState.brightness;
     savedOledBrightness = appState.oledBrightness;
 
+    // Đảm bảo bên trong hàm này có gửi mã lệnh Sleep In (0x10) cho IC màn hình
     display.turnOff();
 
-    // Tat WiFi va ESP-NOW truoc khi vao deep sleep.
-    // Neu khong tắt, WiFi van chay (~150mA) va lam nong device trong khi ngu.
+    // Tắt WiFi và ESP-NOW trước khi ngủ
     esp_now_deinit();
     esp_wifi_stop();
     esp_wifi_deinit();
 
-    // Flush config va sync SD truoc khi tat nguon de tranh mat du lieu / corrupt FAT.
+    // Sync thẻ nhớ
     storage.safeSync(appState);
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    // KHONG goi sd_bg.end()/SPI.end() khi he thong con da task dang chay.
-    // Vi viec teardown bus giua luc GUI/ISR dang su dung de gay WDT va stack canary.
-    // Chi ep cac chan SPI ve idle an toan roi vao deep sleep ngay.
-    pinMode(SD_CS_PIN, OUTPUT);    digitalWrite(SD_CS_PIN, HIGH);
-    pinMode(SPI_SCK_PIN, OUTPUT);  digitalWrite(SPI_SCK_PIN, LOW);
-    pinMode(SPI_MOSI_PIN, OUTPUT); digitalWrite(SPI_MOSI_PIN, LOW);
+    // --- XỬ LÝ CHỐNG RÒ ĐIỆN QUA BUS SPI VÀ TFT ---
+    
+    // 1. Ép thẻ SD ngưng hoạt động
+    pinMode(SD_CS_PIN, OUTPUT);    
+    digitalWrite(SD_CS_PIN, HIGH);
+    
+    // 2. Ép các chân SPI bus về idle
+    pinMode(SPI_SCK_PIN, OUTPUT);  
+    digitalWrite(SPI_SCK_PIN, LOW);
+    pinMode(SPI_MOSI_PIN, OUTPUT); 
+    digitalWrite(SPI_MOSI_PIN, LOW);
+    
+    // 3. Kéo MISO lên cao chống thả nổi
+    pinMode(SPI_MISO_PIN, INPUT_PULLUP); 
 
-    // Tat den nen va giu pin o muc LOW trong suot thoi gian ngu.
-    // gpio_deep_sleep_hold_en() chi anh huong digital GPIO (khong phai RTC GPIO),
-    // nen wake pin (da chuyen sang RTC domain) khong bi dong bang.
+    // 4. Xử lý các chân điều khiển riêng của TFT (CS, DC, RST từ file config)
+    pinMode(TFT_CS, OUTPUT);  digitalWrite(TFT_CS, HIGH); // Ngắt chọn chip màn hình
+    pinMode(TFT_DC, OUTPUT);  digitalWrite(TFT_DC, LOW);
+    pinMode(TFT_RST, OUTPUT); digitalWrite(TFT_RST, HIGH); // Giữ mức HIGH để IC không bị reset liên tục
+
+    // 5. KHÓA TẤT CẢ CÁC CHÂN NÀY LẠI
+    gpio_hold_en((gpio_num_t)SD_CS_PIN);
+    gpio_hold_en((gpio_num_t)SPI_SCK_PIN);
+    gpio_hold_en((gpio_num_t)SPI_MOSI_PIN);
+    gpio_hold_en((gpio_num_t)SPI_MISO_PIN);
+    gpio_hold_en((gpio_num_t)TFT_CS);
+    gpio_hold_en((gpio_num_t)TFT_DC);
+    gpio_hold_en((gpio_num_t)TFT_RST);
+
+    // --- XỬ LÝ ĐÈN NỀN ---
     ledcDetachPin(SCR_BLK_PIN);
     pinMode(SCR_BLK_PIN, OUTPUT);
     digitalWrite(SCR_BLK_PIN, LOW);
     gpio_hold_en((gpio_num_t)SCR_BLK_PIN);
+    
+    // Kích hoạt khóa tổng
     gpio_deep_sleep_hold_en();
 
-    // Cau hinh chan nut chinh (GPIO10) trong RTC domain.
-    rtc_gpio_hold_dis((gpio_num_t)ROTARY_BTN_PIN); // Xoa trang thai hold cu (neu co)
+    // --- CẤU HÌNH WAKEUP BẰNG NÚT NHẤN (RTC DOMAIN) ---
+    rtc_gpio_hold_dis((gpio_num_t)ROTARY_BTN_PIN);
     rtc_gpio_init((gpio_num_t)ROTARY_BTN_PIN);
     rtc_gpio_set_direction((gpio_num_t)ROTARY_BTN_PIN, RTC_GPIO_MODE_INPUT_ONLY);
     rtc_gpio_pulldown_dis((gpio_num_t)ROTARY_BTN_PIN);
@@ -77,7 +99,6 @@ void SystemLogic::goToSleep() {
         rtc_gpio_pullup_en((gpio_num_t)ROTARY_BTN_PIN);
     }
 
-    // Cau hinh chan wake phu (GPIO12) de test loi phan cung nut/chân chinh.
     rtc_gpio_hold_dis((gpio_num_t)WAKE_AUX_PIN);
     rtc_gpio_init((gpio_num_t)WAKE_AUX_PIN);
     rtc_gpio_set_direction((gpio_num_t)WAKE_AUX_PIN, RTC_GPIO_MODE_INPUT_ONLY);
@@ -87,15 +108,12 @@ void SystemLogic::goToSleep() {
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
-    // EXT1 ANY_LOW: 1 trong 2 chan bi keo LOW se wake.
     uint64_t wakeMask = (1ULL << ROTARY_BTN_PIN) | (1ULL << WAKE_AUX_PIN);
     esp_err_t err = esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
     Serial.printf("[SYS] EXT1 setup: %s | mask=0x%llX (btn=%d aux=%d)\n",
         esp_err_to_name(err), wakeMask, ROTARY_BTN_PIN, WAKE_AUX_PIN);
 
     Serial.println("[SYS] Deep Sleep...");
-    // KHONG dung Serial.flush() voi USB CDC: khi chay bang pin (khong co USB host),
-    // flush() se block mai mai va esp_deep_sleep_start() khong bao gio duoc goi.
     delay(20);
     esp_deep_sleep_start();
 }

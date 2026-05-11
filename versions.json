@@ -1,5 +1,9 @@
 [
   {
+    "name": "v1.6.2.9 (Sleep)",
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.9.bin"
+  },
+  {
     "name": "v1.6.2.8 (Last version)",
     "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.8.bin"
   },
