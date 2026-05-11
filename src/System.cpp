@@ -42,8 +42,6 @@ void SystemLogic::begin() {
         
         appState.brightness = savedBrightness;
         appState.oledBrightness = savedOledBrightness;
-        uint64_t wakeMask = esp_sleep_get_ext1_wakeup_status();
-        Serial.printf("[SYS] Wakeup: button mask=0x%llX\n", wakeMask);
     }
 }
 
@@ -122,9 +120,7 @@ void SystemLogic::goToSleep() {
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
     uint64_t wakeMask = (1ULL << ROTARY_BTN_PIN) | (1ULL << WAKE_AUX_PIN);
-    esp_err_t err = esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
-    Serial.printf("[SYS] EXT1 setup: %s | mask=0x%llX (btn=%d aux=%d)\n",
-        esp_err_to_name(err), wakeMask, ROTARY_BTN_PIN, WAKE_AUX_PIN);
+    esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
 
     Serial.println("[SYS] Deep Sleep...");
     delay(20);
