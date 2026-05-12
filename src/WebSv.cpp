@@ -6,6 +6,7 @@
 #include "EspNow.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
+#include <esp_system.h>
 
 // Xử lý triệt để cảnh báo xung đột Macro giữa SdFat và LittleFS
 #include <SdFat.h>
@@ -17,6 +18,7 @@
 WebServerLogic webServer;
 extern SemaphoreHandle_t xGuiSemaphore;
 extern SdFs sd_bg; 
+static char g_webToken[9] = {0};
 
 static String jsonEscape(const char* s) {
     String out;
@@ -64,6 +66,66 @@ static void logSdDiag(const char* tag, const char* path, int attempt) {
         errData,
         (unsigned long)ESP.getFreeHeap()
     );
+}
+
+static void makeWebToken() {
+    uint32_t r = esp_random();
+    snprintf(g_webToken, sizeof(g_webToken), "%08lX", (unsigned long)r);
+}
+
+static bool isAuthorized(WebServer* server) {
+    if (g_webToken[0] == '\0') return false;
+    if (server->hasArg("t") && server->arg("t") == g_webToken) return true;
+    if (server->hasHeader("X-Remote-Lamp-Token") && server->header("X-Remote-Lamp-Token") == g_webToken) return true;
+    return false;
+}
+
+static bool requireAuth(WebServer* server) {
+    if (isAuthorized(server)) return true;
+    server->send(401, "text/plain", "Unauthorized");
+    return false;
+}
+
+static void serveLittleFs(WebServer* server, const char* path, const char* mime, bool authRequired) {
+    if (authRequired && !requireAuth(server)) return;
+    File file = LittleFS.open(path, "r");
+    if (!file) {
+        server->send(404, "text/plain", String("Missing ") + path);
+        return;
+    }
+    server->streamFile(file, mime);
+    file.close();
+}
+
+static bool normalizeSdPath(const String& input, String& out, bool allowRoot) {
+    out = input;
+    out.trim();
+    out.replace('\\', '/');
+    if (out.length() == 0) out = "/";
+    if (!out.startsWith("/")) out = "/" + out;
+    while (out.indexOf("//") >= 0) out.replace("//", "/");
+    if (!allowRoot && out == "/") return false;
+    if (out.indexOf("/../") >= 0 || out.endsWith("/..") || out.indexOf("/./") >= 0 || out.endsWith("/.")) return false;
+    for (size_t i = 0; i < out.length(); ++i) {
+        char c = out[i];
+        if ((uint8_t)c < 0x20 || c == ':') return false;
+    }
+    return out.length() < 128;
+}
+
+static bool sanitizeUploadName(const String& input, String& out) {
+    out = input;
+    out.trim();
+    out.replace('\\', '/');
+    int slash = out.lastIndexOf('/');
+    if (slash >= 0) out = out.substring(slash + 1);
+    if (out.length() == 0 || out == "." || out == "..") return false;
+    if (out.indexOf("..") >= 0) return false;
+    for (size_t i = 0; i < out.length(); ++i) {
+        char c = out[i];
+        if ((uint8_t)c < 0x20 || c == ':' || c == '/' || c == '\\') return false;
+    }
+    return out.length() < 64;
 }
 
 
@@ -147,53 +209,30 @@ static void webTask(void* pvParameters) {
     WebServer* server = new WebServer(80);
     static FsFile uploadFile; 
 
-    // Serve static style.css
     server->on("/style.css", HTTP_GET, [server]() {
-        File file = LittleFS.open("/style.css", "r");
-        if (!file) { server->send(404, "text/plain", "Missing style.css"); return; }
-        server->streamFile(file, "text/css");
-        file.close();
+        serveLittleFs(server, "/style.css", "text/css", false);
     });
-    // Serve static main.js
     server->on("/main.js", HTTP_GET, [server]() {
-        File file = LittleFS.open("/main.js", "r");
-        if (!file) { server->send(404, "text/plain", "Missing main.js"); return; }
-        server->streamFile(file, "application/javascript");
-        file.close();
+        serveLittleFs(server, "/main.js", "application/javascript", false);
     });
     if (mode == WEB_MODE_UPLOAD) {
-        // Serve static style.css
-        server->on("/style.css", HTTP_GET, [server]() {
-            File file = LittleFS.open("/style.css", "r");
-            if (!file) { server->send(404, "text/plain", "Missing style.css"); return; }
-            server->streamFile(file, "text/css");
-            file.close();
-        });
-        // Serve static main.js
-        server->on("/main.js", HTTP_GET, [server]() {
-            File file = LittleFS.open("/main.js", "r");
-            if (!file) { server->send(404, "text/plain", "Missing main.js"); return; }
-            server->streamFile(file, "application/javascript");
-            file.close();
-        });
-        
         server->on("/", HTTP_GET, [server]() {
-            File file = LittleFS.open("/home.html", "r");
-            if (!file) { server->send(500, "text/plain", "Missing home.html"); return; }
-            server->streamFile(file, "text/html"); 
-            file.close();
+            serveLittleFs(server, "/home.html", "text/html", true);
         });
 
         server->on("/upload", HTTP_POST, [server]() {
+            if (!requireAuth(server)) return;
             server->send(200, "text/plain", "OK");
             Serial.println("[WEB] Upload Finished.");
         }, [server]() {
+            if (!isAuthorized(server)) return;
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
                 if (!sd_bg.exists("/background")) sd_bg.mkdir("/background");
 
                 String filename = upload.filename;
-                if (!filename.startsWith("/")) filename = "/" + filename;
+                if (!sanitizeUploadName(filename, filename)) return;
+                filename = "/" + filename;
                 String fullPath = "/background" + filename;
 
                 Serial.printf("[WEB] Starting bg upload: %s\n", fullPath.c_str());
@@ -224,6 +263,7 @@ static void webTask(void* pvParameters) {
         });
 
         server->on("/download", HTTP_GET, [server]() {
+            if (!requireAuth(server)) return;
             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 digitalWrite(SCR_CS_PIN, HIGH);
                 FsFile file = sd_bg.open(appState.bgFilePath, O_RDONLY);
@@ -250,17 +290,16 @@ static void webTask(void* pvParameters) {
         });
 
         server->on("/files", HTTP_GET, [server]() {
-            File file = LittleFS.open("/files.html", "r");
-            if (!file) { 
-                server->send(500, "text/plain", "Missing files.html"); 
-                return; 
-            }
-            server->streamFile(file, "text/html"); 
-            file.close();
+            serveLittleFs(server, "/files.html", "text/html", true);
         });
 
         server->on("/list", HTTP_GET, [server]() {
-            String path = server->hasArg("dir") ? server->arg("dir") : "/";
+            if (!requireAuth(server)) return;
+            String path;
+            if (!normalizeSdPath(server->hasArg("dir") ? server->arg("dir") : "/", path, true)) {
+                server->send(400, "text/plain", "Invalid path");
+                return;
+            }
             String json = "[]";
             bool listed = false;
             uint32_t startMs = millis();
@@ -328,9 +367,35 @@ static void webTask(void* pvParameters) {
             }
         });
 
+        server->on("/storage_info", HTTP_GET, [server]() {
+            if (!requireAuth(server)) return;
+            if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
+                digitalWrite(SCR_CS_PIN, HIGH);
+                uint64_t total = 0;
+                uint64_t freeBytes = 0;
+                if (sd_bg.vol()) {
+                    const uint64_t clusterBytes = (uint64_t)sd_bg.vol()->sectorsPerCluster() * 512ULL;
+                    total = (uint64_t)sd_bg.vol()->clusterCount() * clusterBytes;
+                    freeBytes = (uint64_t)sd_bg.vol()->freeClusterCount() * clusterBytes;
+                }
+                xSemaphoreGiveRecursive(xGuiSemaphore);
+                String json = "{\"total\":" + String((unsigned long long)total) +
+                              ",\"used\":" + String((unsigned long long)(total - freeBytes)) +
+                              ",\"free\":" + String((unsigned long long)freeBytes) + "}";
+                server->send(200, "application/json", json);
+            } else {
+                server->send(500, "text/plain", "SD busy");
+            }
+        });
+
         server->on("/mkdir", HTTP_POST, [server]() {
+            if (!requireAuth(server)) return;
             if (!server->hasArg("path")) { server->send(400, "text/plain", "Missing path"); return; }
-            String path = server->arg("path");
+            String path;
+            if (!normalizeSdPath(server->arg("path"), path, false)) {
+                server->send(400, "text/plain", "Invalid path");
+                return;
+            }
             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 digitalWrite(SCR_CS_PIN, HIGH);
                 if (sd_bg.exists(path.c_str()) || sd_bg.mkdir(path.c_str())) {
@@ -348,6 +413,7 @@ static void webTask(void* pvParameters) {
 
         // BẢO VỆ XÓA ĐỆ QUY TỐI ĐA VỚI portMAX_DELAY ĐỂ CHỐNG VỠ GIAO DỊCH
         server->on("/delete", HTTP_POST, [server]() {
+            if (!requireAuth(server)) return;
             String path;
             if (server->hasArg("path")) {
                 path = server->arg("path");
@@ -358,7 +424,10 @@ static void webTask(void* pvParameters) {
             } else {
                 path = server->arg("filename");
             }
-            if (!path.startsWith("/")) path = "/" + path;
+            if (!normalizeSdPath(path, path, false)) {
+                server->send(400, "text/plain", "Invalid path");
+                return;
+            }
             
             Serial.printf("[WEB] Deleting path: %s\n", path.c_str());
             if (xSemaphoreTakeRecursive(xGuiSemaphore, portMAX_DELAY)) {
@@ -377,8 +446,12 @@ static void webTask(void* pvParameters) {
         });
 
         server->on("/download_file", HTTP_GET, [server]() {
-            String filename = server->arg("filename");
-            if (!filename.startsWith("/")) filename = "/" + filename;
+            if (!requireAuth(server)) return;
+            String filename;
+            if (!normalizeSdPath(server->arg("filename"), filename, false)) {
+                server->send(400, "text/plain", "Invalid path");
+                return;
+            }
             
             if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(1000))) {
                 digitalWrite(SCR_CS_PIN, HIGH);
@@ -415,15 +488,18 @@ static void webTask(void* pvParameters) {
         });
 
         server->on("/upload_file", HTTP_POST, [server]() {
+            if (!requireAuth(server)) return;
             server->send(200, "text/plain", "OK"); 
         }, [server]() {
+            if (!isAuthorized(server)) return;
             HTTPUpload& upload = server->upload();
             if (upload.status == UPLOAD_FILE_START) {
-                String dir = server->hasArg("dir") ? server->arg("dir") : "/";
+                String dir;
+                if (!normalizeSdPath(server->hasArg("dir") ? server->arg("dir") : "/", dir, true)) return;
                 if (!dir.endsWith("/")) dir += "/";
                 
                 String filename = upload.filename;
-                if (filename.startsWith("/")) filename = filename.substring(1);
+                if (!sanitizeUploadName(filename, filename)) return;
                 String fullPath = dir + filename;
                 
                 Serial.printf("[WEB] Starting General Upload: %s\n", fullPath.c_str());
@@ -515,9 +591,11 @@ bool WebServerLogic::runWiFiSetup() {
 void WebServerLogic::runBgUpload() {
     if (!runWiFiSetup()) return;
     String ip = WiFi.localIP().toString();
+    makeWebToken();
 
     char msg_buf[256];
-    sprintf(msg_buf, "1. Up BG: %s\n2. Q.Ly File: %s/files", ip.c_str(), ip.c_str());
+    snprintf(msg_buf, sizeof(msg_buf), "1. Up BG: %s?t=%s\n2. File: %s/files?t=%s",
+             ip.c_str(), g_webToken, ip.c_str(), g_webToken);
     if (xSemaphoreTakeRecursive(xGuiSemaphore, pdMS_TO_TICKS(100))) {
         display.showProgressPopup("WEB SERVER", msg_buf, 0);
         xSemaphoreGiveRecursive(xGuiSemaphore);

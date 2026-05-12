@@ -86,7 +86,7 @@ static bool saveConfigToNvs(const RemoteState &state, const char *safeBgPath) {
     ok &= prefs.putInt("oled", state.oledBrightness) > 0;
     ok &= prefs.putInt("bri", state.brightness) > 0;
     ok &= prefs.putInt("tmp", state.temperature) > 0;
-    ok &= prefs.putBool("dev", state.devMode) == true;
+    prefs.putBool("dev", state.devMode);
     ok &= prefs.putString("bg", safeBgPath) > 0;
     prefs.end();
 

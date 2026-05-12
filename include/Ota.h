@@ -6,6 +6,7 @@
 struct OtaVersion {
     char name[32];
     char url[128];
+    char sha256[65];
 };
 
 class OtaLogic {

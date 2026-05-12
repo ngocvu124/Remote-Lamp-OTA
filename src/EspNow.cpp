@@ -196,7 +196,11 @@ void EspNowLogic::begin() {
     esp_wifi_set_channel(currentChannel, WIFI_SECOND_CHAN_NONE);
     loadSyncedWifiCreds();
 
-    if (esp_now_init() != ESP_OK) return;
+    esp_now_deinit();
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("[ESP-NOW] init failed");
+        return;
+    }
 
     esp_now_set_pmk((uint8_t *)ESPNOW_PMK);
 

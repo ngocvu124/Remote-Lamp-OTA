@@ -1,5 +1,22 @@
 // ======= Trang files.html =======
+const authToken = new URLSearchParams(window.location.search).get('t') || '';
+
+function apiUrl(path) {
+    if (!authToken) return path;
+    const sep = path.includes('?') ? '&' : '?';
+    return path + sep + 't=' + encodeURIComponent(authToken);
+}
+
+function keepAuthLinks() {
+    if (!authToken) return;
+    document.querySelectorAll('a[href^="/"]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (href && !href.includes('t=')) a.setAttribute('href', apiUrl(href));
+    });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+    keepAuthLinks();
     if (!document.getElementById('fileList')) return; // Chỉ chạy trên files.html
 
     // Hiển thị dung lượng bộ nhớ SD
@@ -9,7 +26,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (!bar || !text) return;
         text.innerText = 'Đang tải...';
         bar.style.width = '0%';
-        fetch('/storage_info').then(async r => {
+        fetch(apiUrl('/storage_info')).then(async r => {
             if (!r.ok) throw new Error(await r.text() || 'HTTP ' + r.status);
             return r.json();
         }).then(data => {
@@ -63,7 +80,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     function loadFiles(retry = 0) {
         setStatus('Đang quét...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
-        fetch('/list?dir=' + encodeURIComponent(currentDir))
+        fetch(apiUrl('/list?dir=' + encodeURIComponent(currentDir)))
         .then(async r => {
             if (!r.ok) throw new Error(await r.text() || 'HTTP ' + r.status);
             return r.json();
@@ -75,7 +92,7 @@ window.addEventListener('DOMContentLoaded', () => {
             data.forEach(item => {
                 const isDir = item.isDir;
                 const path = currentDir === "/" ? "/" + item.name : currentDir + "/" + item.name;
-                const downloadBtn = !isDir ? `<a href="/download_file?filename=${encodeURIComponent(path)}" download class="icon-btn dl" title="Tải về">📥</a>` : '';
+                const downloadBtn = !isDir ? `<a href="${apiUrl('/download_file?filename=' + encodeURIComponent(path))}" download class="icon-btn dl" title="Tải về">📥</a>` : '';
                 list.innerHTML += `
                     <div class="file-card">
                         <div class="file-info" ${isDir ? `onclick="navTo('${path}')"` : ''}>
@@ -105,21 +122,21 @@ window.addEventListener('DOMContentLoaded', () => {
     window.deleteItem = function(path, isDir) {
         if (!confirm(isDir ? 'Xóa toàn bộ thư mục?' : 'Xóa tệp này?')) return;
         const formData = new URLSearchParams(); formData.append('path', path);
-        fetch('/delete', { method: 'POST', body: formData }).then(r => r.ok ? loadFiles() : alert('Lỗi xóa'));
+        fetch(apiUrl('/delete'), { method: 'POST', body: formData }).then(r => r.ok ? loadFiles() : alert('Lỗi xóa'));
     };
     window.createFolder = function() {
         const name = prompt("Tên thư mục mới:");
         if (!name) return;
         const path = currentDir === "/" ? "/" + name : currentDir + "/" + name;
         const formData = new URLSearchParams(); formData.append('path', path);
-        fetch('/mkdir', { method: 'POST', body: formData }).then(r => r.ok ? loadFiles() : alert('Lỗi tạo thư mục'));
+        fetch(apiUrl('/mkdir'), { method: 'POST', body: formData }).then(r => r.ok ? loadFiles() : alert('Lỗi tạo thư mục'));
     };
     window.uploadFile = function() {
         const file = document.getElementById('fileInput').files[0];
         if (!file) return;
         setStatus('Đang tải lên...', '#f59e0b', 'rgba(245, 158, 11, 0.1)');
         const formData = new FormData(); formData.append('file', file, file.name);
-        fetch('/upload_file?dir=' + encodeURIComponent(currentDir), { method: 'POST', body: formData }).then(r => {
+        fetch(apiUrl('/upload_file?dir=' + encodeURIComponent(currentDir)), { method: 'POST', body: formData }).then(r => {
             document.getElementById('fileInput').value = '';
             r.ok ? loadFiles() : setStatus('Lỗi tải lên!', '#ef4444', 'rgba(239, 68, 68, 0.1)');
         });
@@ -128,6 +145,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 // ======= Trang home.html =======
 window.addEventListener('DOMContentLoaded', () => {
+    keepAuthLinks();
     const fileInput = document.getElementById('fileInput'), canvas = document.getElementById('canvas'), ctx = canvas?.getContext?.('2d'),
         binPreview = document.getElementById('binPreview'), btx = binPreview?.getContext?.('2d'), 
         uploadBtn = document.getElementById('uploadBtn'), dlLocalBtn = document.getElementById('dlLocalBtn'),
@@ -372,7 +390,7 @@ window.addEventListener('DOMContentLoaded', () => {
         formData.append('bg', new Blob([rgb565Data], { type: 'application/octet-stream' }), finalName);
         // Dùng XMLHttpRequest để theo dõi tiến trình
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/upload', true);
+        xhr.open('POST', apiUrl('/upload'), true);
         xhr.upload.onprogress = function(e) {
             if (e.lengthComputable) {
                 const percent = Math.round(e.loaded * 100 / e.total);
@@ -400,10 +418,10 @@ window.addEventListener('DOMContentLoaded', () => {
     };
 });
 // ======= Shared JS for Remote Lamp Web =======
-function goHome() { window.location.href = "/"; }
+function goHome() { window.location.href = apiUrl("/"); }
 function exitServer() {
     if(confirm("Ngắt kết nối?")) {
-        fetch('/exit').then(() => {
+        fetch(apiUrl('/exit')).then(() => {
             document.body.innerHTML = '<div style="text-align:center; margin-top:30vh; color:#10b981;"><h1>✅ Đã ngắt kết nối</h1></div>';
         });
     }

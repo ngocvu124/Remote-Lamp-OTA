@@ -4,6 +4,7 @@ import re
 import json
 import shutil
 import subprocess
+import hashlib
 
 
 def _is_enabled(value, default=False):
@@ -35,6 +36,9 @@ def after_build(source, target, env):
     shutil.copy(bin_path, new_bin_path)
     print(f"[*] Da tao file firmware: {new_bin_name}")
 
+    with open(new_bin_path, "rb") as f:
+        new_bin_sha256 = hashlib.sha256(f.read()).hexdigest()
+
     # 3. Cập nhật thẳng vào file versions.json
     json_path = os.path.join(env.get("PROJECT_DIR"), "versions.json")
     github_url = f"https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/{new_bin_name}"
@@ -51,8 +55,22 @@ def after_build(source, target, env):
     data = [entry for entry in data if entry.get("url") != github_url]
     data.insert(0, {
         "name": f"{version} ({fw_name})",
-        "url": github_url
+        "url": github_url,
+        "sha256": new_bin_sha256
     })
+
+    # Backfill SHA-256 for firmware files that are already present locally.
+    for entry in data:
+        if entry.get("sha256"):
+            continue
+        url = entry.get("url", "")
+        filename = url.rsplit("/", 1)[-1]
+        if not filename:
+            continue
+        local_fw = os.path.join(env.get("PROJECT_DIR"), filename)
+        if os.path.exists(local_fw):
+            with open(local_fw, "rb") as f:
+                entry["sha256"] = hashlib.sha256(f.read()).hexdigest()
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)

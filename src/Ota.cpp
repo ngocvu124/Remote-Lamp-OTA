@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <esp_heap_caps.h>
+#include <mbedtls/sha256.h>
 
 extern SemaphoreHandle_t xGuiSemaphore;
 OtaLogic ota;
@@ -38,7 +39,34 @@ static void showOtaProgress(int percent) {
     }
 }
 
-static bool runOtaWithPsramBuffer(const char* firmwareUrl, String& errMsg) {
+static bool isValidSha256Hex(const char* hash) {
+    if (!hash || strlen(hash) != 64) return false;
+    for (size_t i = 0; i < 64; ++i) {
+        const char c = hash[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) return false;
+    }
+    return true;
+}
+
+static void bytesToHex(const uint8_t* bytes, size_t len, char* out, size_t outSize) {
+    static const char hex[] = "0123456789abcdef";
+    if (outSize < (len * 2 + 1)) {
+        if (outSize) out[0] = '\0';
+        return;
+    }
+    for (size_t i = 0; i < len; ++i) {
+        out[i * 2] = hex[bytes[i] >> 4];
+        out[i * 2 + 1] = hex[bytes[i] & 0x0F];
+    }
+    out[len * 2] = '\0';
+}
+
+static bool runOtaWithPsramBuffer(const char* firmwareUrl, const char* expectedSha256, String& errMsg) {
+    if (!isValidSha256Hex(expectedSha256)) {
+        errMsg = "Missing firmware SHA256";
+        return false;
+    }
+
     WiFiClientSecure client;
     client.setInsecure();
     client.setTimeout(15000);
@@ -95,6 +123,9 @@ static bool runOtaWithPsramBuffer(const char* firmwareUrl, String& errMsg) {
     WiFiClient* stream = http.getStreamPtr();
     size_t writtenTotal = 0;
     uint32_t lastDataMs = millis();
+    mbedtls_sha256_context shaCtx;
+    mbedtls_sha256_init(&shaCtx);
+    mbedtls_sha256_starts(&shaCtx, 0);
 
     while (writtenTotal < (size_t)totalSize) {
         size_t avail = stream->available();
@@ -102,6 +133,7 @@ static bool runOtaWithPsramBuffer(const char* firmwareUrl, String& errMsg) {
             if (!http.connected()) break;
             if (millis() - lastDataMs > 15000) {
                 errMsg = "Read timeout";
+                mbedtls_sha256_free(&shaCtx);
                 free(buf);
                 Update.abort();
                 http.end();
@@ -119,9 +151,11 @@ static bool runOtaWithPsramBuffer(const char* firmwareUrl, String& errMsg) {
         }
 
         lastDataMs = millis();
+        mbedtls_sha256_update(&shaCtx, buf, (size_t)n);
         const size_t wrote = Update.write(buf, (size_t)n);
         if (wrote != (size_t)n) {
             errMsg = String("Flash write failed: ") + Update.errorString();
+            mbedtls_sha256_free(&shaCtx);
             free(buf);
             Update.abort();
             http.end();
@@ -135,10 +169,23 @@ static bool runOtaWithPsramBuffer(const char* firmwareUrl, String& errMsg) {
 
     free(buf);
     http.end();
+    uint8_t actualDigest[32];
+    char actualSha256[65];
+    mbedtls_sha256_finish(&shaCtx, actualDigest);
+    mbedtls_sha256_free(&shaCtx);
+    bytesToHex(actualDigest, sizeof(actualDigest), actualSha256, sizeof(actualSha256));
 
     if (writtenTotal != (size_t)totalSize) {
         Update.abort();
         errMsg = String("Download incomplete: ") + String((unsigned)writtenTotal) + "/" + String(totalSize);
+        return false;
+    }
+
+    if (!String(actualSha256).equalsIgnoreCase(expectedSha256)) {
+        Update.abort();
+        errMsg = "Firmware SHA256 mismatch";
+        Serial.printf("[OTA] Expected SHA256: %s\n", expectedSha256);
+        Serial.printf("[OTA] Actual SHA256:   %s\n", actualSha256);
         return false;
     }
 
@@ -184,6 +231,9 @@ bool OtaLogic::fetchVersions() {
                 versions[i].name[sizeof(versions[i].name) - 1] = '\0';
                 strncpy(versions[i].url, url, sizeof(versions[i].url) - 1);
                 versions[i].url[sizeof(versions[i].url) - 1] = '\0';
+                const char *sha256 = arr[i]["sha256"] | "";
+                strncpy(versions[i].sha256, sha256, sizeof(versions[i].sha256) - 1);
+                versions[i].sha256[sizeof(versions[i].sha256) - 1] = '\0';
                 versionCount++;
             }
             if (versionCount > 0) {
@@ -221,7 +271,15 @@ void OtaLogic::begin(const char* firmwareUrl) {
 
     Serial.printf("[OTA] Updating from: %s\n", firmwareUrl);
     String err;
-    if (!runOtaWithPsramBuffer(firmwareUrl, err)) {
+    const char* expectedSha256 = "";
+    for (int i = 0; i < versionCount; ++i) {
+        if (strcmp(ota.versions[i].url, firmwareUrl) == 0) {
+            expectedSha256 = ota.versions[i].sha256;
+            break;
+        }
+    }
+
+    if (!runOtaWithPsramBuffer(firmwareUrl, expectedSha256, err)) {
         Serial.printf("[OTA] Update failed: %s\n", err.c_str());
         char errMsg[160];
         snprintf(errMsg, sizeof(errMsg), "Update Failed!\nError: %s\n\nPlease reset and try again.", err.c_str());

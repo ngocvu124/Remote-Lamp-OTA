@@ -1,122 +1,152 @@
 [
   {
     "name": "v1.6.2.9 (Sleep)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.9.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.9.bin",
+    "sha256": "2c67e37c3cf9ec6cf95a2056f4595b5a21722737a54bd8e11e0bfcc9e4dc81b1"
   },
   {
     "name": "v1.6.2.8 (Last version)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.8.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.8.bin",
+    "sha256": "2ce0d771bc75fb05f8930b3919262c9eb78997f1fa594dbfe2a3979bbc5359da"
   },
   {
     "name": "v1.6.2.7 (Fix web list JSON escape)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.7.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.7.bin",
+    "sha256": "2b216c2c57a0a5f79cb88f70ff8b208e5e5e2277fdaf9fcf99cd1165f942c717"
   },
   {
     "name": "v1.6.2.6 (SD web diagnostics logs)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.6.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.6.bin",
+    "sha256": "dee5c19eeb88ba8888119aa9bb4ecc6c932fabf09e0002f0beeb570414e81179"
   },
   {
     "name": "v1.6.2.5 (Fix web SD read retry)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.5.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.5.bin",
+    "sha256": "a323e9cce3cc298ad7b985e630c3ab3b1670eb1e38fbee20d67abba0605a572b"
   },
   {
     "name": "v1.6.2.4 (Fix preview: lv_refr_now force flush)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.4.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.4.bin",
+    "sha256": "c717030fb79648eb7c47b99dde67ac3f286deed41698b7563044b4469b6466c5"
   },
   {
     "name": "v1.6.2.3 (BG list then scroll-preview)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.3.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.3.bin",
+    "sha256": "50af3b4536e78a2513475f5db158cd879234fe192518d5b043199a3c628fa851"
   },
   {
     "name": "v1.6.2.2 (Auto-preview BG on scroll/entry)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.2.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.2.bin",
+    "sha256": "109f0fc23315a7dce9f8d9f06fd6a569e9a6cfd056b52d8c8e63c40734a8a4ca"
   },
   {
     "name": "v1.6.2.1 (SD safe-sync before sleep/reset)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.1.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.1.bin",
+    "sha256": "06371d97425a516fea3053c7efc6a6330ec3c4ed22b12b841586f5ce4bb5700e"
   },
   {
     "name": "v1.6.2.0 (Lean Remote (Stock Removed))",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.0.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.2.0.bin",
+    "sha256": "eec59d6bde0a9c6b9449cec8e1fd5beebc89d954023cdd6d15cd0310c980833c"
   },
   {
     "name": "v1.6.1.1 (AP WiFi QR on Turn On AP)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.1.1.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.1.1.bin",
+    "sha256": "2593cc5ffa220ce5ec0eac51feacf03dbe0fb00c664537fc72b940a3ba35b103"
   },
   {
     "name": "v1.6.1.0 (Lamp Set: Turn On AP)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.1.0.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.1.0.bin",
+    "sha256": "f4dc1d7c5b0710f2efeaa9c2ed2c23ab5d82dd4c34cc21ca0ed9ecb5e2c33995"
   },
   {
     "name": "v1.6.0.9 (Lamp Set: Turn On AP)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.9.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.9.bin",
+    "sha256": "dc5173c9eaf67f98125fe7a77296dd211cb54c7bf1846aa2c7bc8852151a25db"
   },
   {
     "name": "v1.6.0.8 (Command ACK fallback for Lamp Set)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.8.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.8.bin",
+    "sha256": "ae68656f1984560d4a7e3120a940b93ba1ae64bcd3112fceebcd757e09ceb9c0"
   },
   {
     "name": "v1.6.0.7 (Lamp Set actions + dynamic QR sync)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.7.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.7.bin",
+    "sha256": "99bf3daeac87c604a3f7cae88f46212f3f8e3dd090bedb359000d15ea2cab41d"
   },
   {
     "name": "v1.6.0.6 (HomeKit QR on remote)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.6.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.6.bin",
+    "sha256": "25a67f53ef95cf49c6ba59de902dbe7023aa66453d4e4869fd013d400c0799d8"
   },
   {
     "name": "v1.6.0.5 (Dual wake pins for deep sleep)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.5.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.5.bin",
+    "sha256": "232268c1a87235af309ad63e6204f1e2c5d572dff8355bd140dc44d6b0b1a3f4"
   },
   {
     "name": "v1.6.0.4 (Fix save storm and SD read retry)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.4.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.4.bin",
+    "sha256": "c983270814e92917283457df627a6e11b5c882e387d08cd098969536c0a6b624"
   },
   {
     "name": "v1.6.0.3 (Use full-frame PSRAM rendering)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.3.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.3.bin",
+    "sha256": "9aa6cc7cfb25dc6f604e2cecbfd534882323e52f5fc1eb1cad0a74fc5bc4b335"
   },
   {
     "name": "v1.6.0.2 (Fix sleep crash race and BG validation)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.2.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.2.bin",
+    "sha256": "97ed1b5374f02f413f7755a52db1ed603075bda6112841c109e3dfa40c52ef7b"
   },
   {
     "name": "v1.6.0.1 (Fix config recovery and OTA refresh)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.1.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.1.bin",
+    "sha256": "97ed1b5374f02f413f7755a52db1ed603075bda6112841c109e3dfa40c52ef7b"
   },
   {
     "name": "v1.6.0.0 (Fix Temperature issue)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.0.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.6.0.0.bin",
+    "sha256": "7054000a7acfb2fa83e2cefcb2c2b800b05d5c25200c631f38f94664a5987b03"
   },
   {
     "name": "v1.5.0.0 (Add About Device)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.5.0.0.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.5.0.0.bin",
+    "sha256": "781a8efde169d6e2e5608ca84107694b4a74442fdca12a11b76646121779b808"
   },
   {
     "name": "v1.4.0.1 (Add file explore function)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.4.0.1.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.4.0.1.bin",
+    "sha256": "2d33daea55c1eaca3d6d7982f5810dfd29f90f8432198a43c07cb2ca5aae2f8d"
   },
   {
     "name": "v1.4.0.0 (Add file explore function)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.4.0.0.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.4.0.0.bin",
+    "sha256": "7e333c0864790dcbafa4836293244d74cf25e1192e9dec7585ca1da12cd596ae"
   },
   {
     "name": "v1.3.0.0 (Fix encoder)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.3.0.0.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.3.0.0.bin",
+    "sha256": "b7a3a080045fa6fe52e78b1dc7151904036f9d76be10618c24bfd0d9e657b8f3"
   },
   {
     "name": "v1.2.1.1 (Upgrade wifi)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.1.1.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.1.1.bin",
+    "sha256": "02f18cead672419e020ac911028396c82d30ba18785d571b4e47a234313af840"
   },
   {
     "name": "v1.2.1 (Upgrade wifi)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.1.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.1.bin",
+    "sha256": "ff7f68cbbdcf2a5e4ef1a65f5e474bc74b7f88e036be9518013c8acce88d326c"
   },
   {
     "name": "v1.2 (Upgrade wifi)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.2.bin",
+    "sha256": "d9a42a6a584ddabe863fd88ea3c4bbb19900ffb7428b3d0c0fda42991fe8a3c1"
   },
   {
     "name": "v1.1 (New version)",
-    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.1.bin"
+    "url": "https://raw.githubusercontent.com/ngocvu124/Remote-Lamp-OTA/main/firmware_v1.1.bin",
+    "sha256": "d6944b87517dffd79c44151f9aacfe1367fbec70486597e9beecd7175e68b6e7"
   }
 ]
