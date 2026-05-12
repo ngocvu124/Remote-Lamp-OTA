@@ -57,6 +57,18 @@ This project is built using **PlatformIO**. The following major libraries are us
 
 ---
 
+## 🔧 Build & Upload
+
+```bash
+pio run -t upload       # Build and flash firmware only
+pio run -t uploadfs     # Upload LittleFS web assets from data/
+pio run -e lolin_s3_mini_release  # Build OTA artifact, update versions.json, commit and push
+```
+
+Regular builds do not generate OTA commits. Use the release environment only when publishing a new OTA binary.
+
+---
+
 ## 📁 SD Card Structure
 
 The MicroSD card must be formatted to **FAT32**. 

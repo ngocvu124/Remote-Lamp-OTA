@@ -13,6 +13,10 @@ def _is_enabled(value, default=False):
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 def after_build(source, target, env):
+    release_ota = _is_enabled(env.GetProjectOption("custom_release_ota", "0"), default=False)
+    if not release_ota:
+        return
+
     print("\n\033[92m=== AUTO RENAME, JSON & GITHUB PUSH ===\033[0m")
     
     # 1. Đọc Config.h để lấy Version và Tên bản cập nhật
@@ -95,8 +99,7 @@ def after_build(source, target, env):
         commit_msg = f"Auto-Upload OTA: {version} - {fw_name}"
         subprocess.run(["git", "commit", "-m", commit_msg], check=True, cwd=project_dir)
         
-        # CÚ CHỐT: Dùng thêm cờ "-f" để ép GitHub nhận file, bỏ qua lỗi lệch phiên bản
-        subprocess.run(["git", "push", "-f", "origin", "main"], check=True, cwd=project_dir)
+        subprocess.run(["git", "push", "origin", "main"], check=True, cwd=project_dir)
         
         print("\033[92m[+] TAI LEN GITHUB THANH CONG!\033[0m")
     except Exception as e:

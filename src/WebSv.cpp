@@ -388,6 +388,12 @@ static void webTask(void* pvParameters) {
             }
         });
 
+        server->on("/exit", HTTP_GET, [server]() {
+            if (!requireAuth(server)) return;
+            server->send(200, "text/plain", "OK");
+            webServer.isRunning = false;
+        });
+
         server->on("/mkdir", HTTP_POST, [server]() {
             if (!requireAuth(server)) return;
             if (!server->hasArg("path")) { server->send(400, "text/plain", "Missing path"); return; }
